@@ -1,5 +1,6 @@
-# Cloudflare Worker: Consent Storage for GDPR compliance
-name = "sw-consent-storage"
+# Cloudflare Worker: Vue Privacy - Consent Storage for GDPR compliance
+# Companion worker for @structured-world/vue-privacy package
+name = "vue-privacy-worker"
 main = "src/index.ts"
 compatibility_date = "2024-12-01"
 

@@ -1,5 +1,6 @@
 {
-  "name": "sw-consent-worker",
+  "name": "vue-privacy-worker",
+  "description": "Cloudflare Worker companion for @structured-world/vue-privacy - GDPR consent storage",
   "version": "1.0.0",
   "private": true,
   "scripts": {
