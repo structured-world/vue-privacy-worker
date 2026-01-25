@@ -1,0 +1,16 @@
+# Cloudflare Worker: Consent Storage for GDPR compliance
+name = "sw-consent-storage"
+main = "src/index.ts"
+compatibility_date = "2024-12-01"
+
+# Routes - add domains that use consent storage
+# Each domain gets its own KV prefix for isolation
+routes = [
+  { pattern = "example.com/api/consent", zone_name = "example.com" }
+]
+
+# KV namespace for consent storage (365 days TTL)
+# Create: wrangler kv:namespace create CONSENT_KV
+[[kv_namespaces]]
+binding = "CONSENT_KV"
+id = "REPLACE_WITH_KV_NAMESPACE_ID"
