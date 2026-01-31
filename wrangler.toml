@@ -7,8 +7,8 @@ compatibility_date = "2024-12-01"
 # Routes - add domains that use consent storage
 # Each domain gets its own KV prefix for isolation
 routes = [
-  { pattern = "gitlab-mcp.sw.foundation/api/consent", zone_name = "sw.foundation" },
-  { pattern = "privacy.sw.foundation/api/consent", zone_name = "sw.foundation" }
+  { pattern = "gitlab-mcp.sw.foundation/api/consent*", zone_name = "sw.foundation" },
+  { pattern = "privacy.sw.foundation/api/consent*", zone_name = "sw.foundation" }
 ]
 
 # KV namespace for consent storage (365 days TTL)
