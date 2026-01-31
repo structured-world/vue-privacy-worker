@@ -170,14 +170,15 @@ async function handlePost(
 
   const data = body as Record<string, unknown>;
 
-  // Validate required fields
-  const userId = data.id;
-  if (!userId || typeof userId !== "string") {
-    return jsonResponse({ error: "Missing id field" }, 400, corsHeaders);
-  }
-
-  if (!/^[a-zA-Z0-9-]{1,64}$/.test(userId)) {
-    return jsonResponse({ error: "Invalid id format" }, 400, corsHeaders);
+  // User ID: use provided or generate new UUID
+  let userId: string;
+  if (data.id && typeof data.id === "string") {
+    if (!/^[a-zA-Z0-9-]{1,64}$/.test(data.id)) {
+      return jsonResponse({ error: "Invalid id format" }, 400, corsHeaders);
+    }
+    userId = data.id;
+  } else {
+    userId = crypto.randomUUID();
   }
 
   const categories = data.categories;
