@@ -1,12 +1,13 @@
-# Consent Worker
+# Vue Privacy Worker
 
-Cloudflare Worker for storing GDPR consent preferences in KV.
+Cloudflare Worker companion for [@structured-world/vue-privacy](https://github.com/structured-world/vue-privacy) - GDPR consent storage in KV.
 
 ## Features
 
 - Per-domain isolation (KV key prefix)
 - 365-day TTL for consent storage
 - Simple REST API (GET/POST)
+- CORS support with per-domain configuration
 
 ## API
 
@@ -67,23 +68,24 @@ Response:
 
 Example: `example.com:abc123-def456`
 
-## Adding a New Domain
+## Self-Hosting
 
-1. Add route in `wrangler.toml`:
+1. Fork this repository
+2. Create KV namespace:
+   ```bash
+   wrangler kv:namespace create CONSENT_KV
+   ```
+3. Update `wrangler.toml` with your KV namespace ID
+4. Add route for your domain:
    ```toml
    routes = [
-     { pattern = "newdomain.com/api/consent", zone_name = "newdomain.com" }
+     { pattern = "yourdomain.com/api/consent", zone_name = "yourdomain.com" }
    ]
    ```
-
-2. Optionally add CORS origins in `src/index.ts` `ALLOWED_DOMAINS`
-
-## Secrets Required
-
-| Secret | Description |
-|--------|-------------|
-| `CLOUDFLARE_API_TOKEN` | Cloudflare API token with Workers edit |
-| `CLOUDFLARE_ACCOUNT_ID` | Cloudflare account ID |
+5. Deploy:
+   ```bash
+   npm run deploy
+   ```
 
 ## Development
 
@@ -93,7 +95,36 @@ npm run dev      # Local development
 npm run deploy   # Manual deploy
 ```
 
-## Integration with @structured-world/consent
+## Status & Roadmap
 
-This worker is designed to work with the `@structured-world/consent` npm package
-when KV storage backend is enabled (see issue #8 in consent repo).
+### Current (v1.0)
+
+| Feature | Status |
+|---------|--------|
+| GET/POST consent API | Done |
+| Per-domain KV isolation | Done |
+| 365-day TTL storage | Done |
+| CORS configuration | Done |
+| GitHub Actions deploy | Done |
+
+### Planned
+
+| Feature | Description |
+|---------|-------------|
+| vue-privacy integration | Automatic sync with `@structured-world/vue-privacy` storage backend |
+| Rate limiting | Prevent abuse via KV-based rate limiting |
+| Consent versioning | Track consent version changes |
+| Bulk export | Admin API for compliance exports |
+| Analytics events | Optional consent analytics (opt-in rates) |
+
+## Integration with @structured-world/vue-privacy
+
+This worker is designed to work with the `@structured-world/vue-privacy` npm package
+for server-side consent storage.
+
+**Note:** Integration with vue-privacy is planned but not yet implemented. Currently the worker
+provides a standalone REST API for consent storage.
+
+## License
+
+Apache 2.0

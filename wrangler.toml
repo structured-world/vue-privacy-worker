@@ -1,16 +1,17 @@
-# Cloudflare Worker: Consent Storage for GDPR compliance
-name = "sw-consent-storage"
+# Cloudflare Worker: Vue Privacy - Consent Storage for GDPR compliance
+# Companion worker for @structured-world/vue-privacy package
+name = "vue-privacy-worker"
 main = "src/index.ts"
 compatibility_date = "2024-12-01"
 
 # Routes - add domains that use consent storage
 # Each domain gets its own KV prefix for isolation
 routes = [
-  { pattern = "example.com/api/consent", zone_name = "example.com" }
+  { pattern = "gitlab-mcp.sw.foundation/api/consent", zone_name = "sw.foundation" },
+  { pattern = "privacy.sw.foundation/api/consent", zone_name = "sw.foundation" }
 ]
 
 # KV namespace for consent storage (365 days TTL)
-# Create: wrangler kv:namespace create CONSENT_KV
 [[kv_namespaces]]
 binding = "CONSENT_KV"
-id = "REPLACE_WITH_KV_NAMESPACE_ID"
+id = "760ad4a19de244b5b24f258bec6e2e4b"

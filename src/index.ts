@@ -35,10 +35,18 @@ interface StoredConsent extends ConsentData {
 
 const CONSENT_TTL_SECONDS = 365 * 24 * 60 * 60; // 365 days
 
-// Allowed origins per domain (add domains here)
+// Allowed origins per domain
 const ALLOWED_DOMAINS: Record<string, string[]> = {
-  // Example:
-  // "example.com": ["https://example.com", "https://www.example.com"],
+  "gitlab-mcp.sw.foundation": [
+    "https://gitlab-mcp.sw.foundation",
+    "http://localhost:5173",
+    "http://localhost:4173",
+  ],
+  "privacy.sw.foundation": [
+    "https://privacy.sw.foundation",
+    "http://localhost:5173",
+    "http://localhost:4173",
+  ],
 };
 
 export default {
