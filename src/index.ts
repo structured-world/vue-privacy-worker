@@ -7,6 +7,7 @@
  * Endpoints:
  * - GET  /api/consent?id=<user_id> - Retrieve stored consent
  * - POST /api/consent - Store consent preferences
+ * - GET  /api/geo - Geo-detection via Cloudflare request.cf
  *
  * KV Binding: CONSENT_KV
  * KV Key format: {domain}:{user_id}
@@ -61,6 +62,11 @@ export default {
     // Handle CORS preflight
     if (request.method === "OPTIONS") {
       return new Response(null, { status: 204, headers: corsHeaders });
+    }
+
+    // Geo-detection endpoint (no KV needed)
+    if (url.pathname === "/api/geo" && request.method === "GET") {
+      return handleGeo(request, corsHeaders);
     }
 
     if (url.pathname !== "/api/consent") {
@@ -118,6 +124,26 @@ function jsonResponse(
     status,
     headers: { ...headers, "Content-Type": "application/json" },
   });
+}
+
+function handleGeo(
+  request: Request,
+  corsHeaders: Record<string, string>,
+): Response {
+  const cf = request.cf as
+    | { country?: string; isEUCountry?: string; continent?: string }
+    | undefined;
+
+  return jsonResponse(
+    {
+      isEU: cf?.isEUCountry === "1",
+      countryCode: cf?.country ?? null,
+      continent: cf?.continent ?? null,
+      method: "worker",
+    },
+    200,
+    corsHeaders,
+  );
 }
 
 async function handleGet(
