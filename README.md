@@ -188,7 +188,7 @@ Example: `example.com:abc123-def456`
    ```
 6. Deploy:
    ```bash
-   npm run deploy
+   yarn deploy
    ```
 
 ## Development

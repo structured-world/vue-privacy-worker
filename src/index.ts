@@ -425,9 +425,18 @@ async function handleAnalyticsEvent(
   // For analytics counters, small count loss under high concurrency is acceptable.
   // If exact counts are needed, use Durable Objects instead.
   const stored = await env.ANALYTICS_KV.get(kvKey);
-  const analytics: DailyAnalytics = stored
-    ? (JSON.parse(stored) as DailyAnalytics)
-    : createEmptyDailyAnalytics();
+  let analytics: DailyAnalytics;
+  if (stored) {
+    try {
+      analytics = JSON.parse(stored) as DailyAnalytics;
+    } catch {
+      // If stored data is corrupted, start fresh for this day
+      console.error(`Corrupted analytics data for ${kvKey}, resetting`);
+      analytics = createEmptyDailyAnalytics();
+    }
+  } else {
+    analytics = createEmptyDailyAnalytics();
+  }
 
   // Increment event counter
   analytics[eventType as keyof Pick<DailyAnalytics, AnalyticsEventType>]++;
