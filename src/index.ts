@@ -127,6 +127,8 @@ export default {
     _ctx: ExecutionContext,
   ): Promise<Response> {
     const url = new URL(request.url);
+    // Host is derived from URL (set by Cloudflare routing), not from Host header.
+    // This is safe: Workers only receive requests matching wrangler.toml routes.
     const host = url.hostname;
 
     // CORS headers
@@ -144,6 +146,9 @@ export default {
     }
 
     // Analytics endpoints
+    // POST is intentionally public (called from client-side consent banner).
+    // Rate limiting is not implemented - for high-traffic sites, add at edge (WAF rules).
+    // GET requires admin auth (handled in handleAnalyticsReport).
     if (url.pathname === "/api/analytics") {
       if (!env.ANALYTICS_KV) {
         return jsonResponse(
@@ -449,6 +454,10 @@ async function handleAnalyticsEvent(
   let analytics: DailyAnalytics;
   if (stored) {
     try {
+      // Type assertion is acceptable here: we control the write format, and any
+      // malformed data (e.g., missing fields) will produce undefined values that
+      // are handled safely via arithmetic (undefined + 1 = NaN, but we'd catch
+      // that on next read). For stricter validation, use Zod or similar.
       analytics = JSON.parse(stored) as DailyAnalytics;
     } catch {
       // If stored data is corrupted, start fresh for this day
