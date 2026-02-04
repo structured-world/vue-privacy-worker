@@ -133,7 +133,9 @@ Rate limit state is stored in KV with prefix `rl:`:
 rl:{ip_address}
 ```
 
-Entries auto-expire after the configured window.
+Entries use sliding TTL — expiration resets on each allowed request. This means
+active users maintain their rate limit state as long as they keep making requests
+within the window.
 
 ## Consent Versioning
 

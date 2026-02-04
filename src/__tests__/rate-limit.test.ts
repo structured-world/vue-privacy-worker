@@ -338,3 +338,129 @@ describe("Consent API with Rate Limiting", () => {
     expect(response.headers.get("X-RateLimit-Limit")).toBe("100");
   });
 });
+
+describe("Rate Limit Corrupted Data Handling", () => {
+  // Tests for malformed KV entries that could occur from bugs, manual edits, or data corruption
+  beforeEach(async () => {
+    const keys = await env.CONSENT_KV.list({ prefix: "rl:" });
+    for (const key of keys.keys) {
+      await env.CONSENT_KV.delete(key.name);
+    }
+  });
+
+  it("should handle negative count in KV by starting fresh window", async () => {
+    const ip = "10.0.0.70";
+
+    // Corrupted state with negative count
+    await env.CONSENT_KV.put(
+      `rl:${ip}`,
+      JSON.stringify({ count: -5, resetAt: Math.floor(Date.now() / 1000) + 60 }),
+      { expirationTtl: 60 },
+    );
+
+    const ctx = createExecutionContext();
+    const response = await worker.fetch(
+      createRequest("GET", "/api/geo", { ip }),
+      env,
+      ctx,
+    );
+    await waitOnExecutionContext(ctx);
+
+    // Invalid data should be treated as new window (count=1, remaining=99)
+    expect(response.status).toBe(200);
+    expect(response.headers.get("X-RateLimit-Remaining")).toBe("99");
+  });
+
+  it("should handle non-numeric count in KV by starting fresh window", async () => {
+    const ip = "10.0.0.71";
+
+    // Corrupted state with string count
+    await env.CONSENT_KV.put(
+      `rl:${ip}`,
+      JSON.stringify({ count: "fifty", resetAt: Math.floor(Date.now() / 1000) + 60 }),
+      { expirationTtl: 60 },
+    );
+
+    const ctx = createExecutionContext();
+    const response = await worker.fetch(
+      createRequest("GET", "/api/geo", { ip }),
+      env,
+      ctx,
+    );
+    await waitOnExecutionContext(ctx);
+
+    // Invalid data should be treated as new window
+    expect(response.status).toBe(200);
+    expect(response.headers.get("X-RateLimit-Remaining")).toBe("99");
+  });
+
+  it("should handle missing fields in KV by starting fresh window", async () => {
+    const ip = "10.0.0.72";
+
+    // Corrupted state with missing resetAt
+    await env.CONSENT_KV.put(
+      `rl:${ip}`,
+      JSON.stringify({ count: 50 }),
+      { expirationTtl: 60 },
+    );
+
+    const ctx = createExecutionContext();
+    const response = await worker.fetch(
+      createRequest("GET", "/api/geo", { ip }),
+      env,
+      ctx,
+    );
+    await waitOnExecutionContext(ctx);
+
+    // Missing fields should be treated as new window
+    expect(response.status).toBe(200);
+    expect(response.headers.get("X-RateLimit-Remaining")).toBe("99");
+  });
+
+  it("should fail-open on non-JSON data in KV (no rate limit headers)", async () => {
+    const ip = "10.0.0.73";
+
+    // Completely invalid data (not JSON) causes JSON.parse to throw
+    await env.CONSENT_KV.put(
+      `rl:${ip}`,
+      "not-valid-json",
+      { expirationTtl: 60 },
+    );
+
+    const ctx = createExecutionContext();
+    const response = await worker.fetch(
+      createRequest("GET", "/api/geo", { ip }),
+      env,
+      ctx,
+    );
+    await waitOnExecutionContext(ctx);
+
+    // Fail-open: request succeeds but rate limit headers are not included
+    // (KV error is caught and logged, request proceeds without rate limiting)
+    expect(response.status).toBe(200);
+    expect(response.headers.get("X-RateLimit-Limit")).toBeNull();
+  });
+
+  it("should handle NaN resetAt in KV by starting fresh window", async () => {
+    const ip = "10.0.0.74";
+
+    // Corrupted state with NaN resetAt
+    await env.CONSENT_KV.put(
+      `rl:${ip}`,
+      JSON.stringify({ count: 50, resetAt: NaN }),
+      { expirationTtl: 60 },
+    );
+
+    const ctx = createExecutionContext();
+    const response = await worker.fetch(
+      createRequest("GET", "/api/geo", { ip }),
+      env,
+      ctx,
+    );
+    await waitOnExecutionContext(ctx);
+
+    // NaN resetAt should be treated as new window
+    expect(response.status).toBe(200);
+    expect(response.headers.get("X-RateLimit-Remaining")).toBe("99");
+  });
+});

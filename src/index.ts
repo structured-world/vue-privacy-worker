@@ -117,8 +117,9 @@ async function checkRateLimit(
   let state: RateLimitState;
 
   // Validate stored data structure (guard against corrupted KV entries)
+  // Check: exists, count is non-negative number, resetAt is valid number
   const isValidState = stored &&
-    typeof stored.count === "number" && !Number.isNaN(stored.count) &&
+    typeof stored.count === "number" && !Number.isNaN(stored.count) && stored.count >= 0 &&
     typeof stored.resetAt === "number" && !Number.isNaN(stored.resetAt);
 
   if (isValidState && stored.resetAt > now) {
