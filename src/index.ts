@@ -68,13 +68,17 @@ const DEFAULT_RATE_LIMIT: RateLimitConfig = {
  * Get rate limit configuration from environment or defaults
  */
 function getRateLimitConfig(env: Env): RateLimitConfig {
+  const maxRequests = env.RATE_LIMIT_MAX_REQUESTS
+    ? parseInt(env.RATE_LIMIT_MAX_REQUESTS, 10)
+    : DEFAULT_RATE_LIMIT.maxRequests;
+  const windowSeconds = env.RATE_LIMIT_WINDOW_SECONDS
+    ? parseInt(env.RATE_LIMIT_WINDOW_SECONDS, 10)
+    : DEFAULT_RATE_LIMIT.windowSeconds;
+
   return {
-    maxRequests: env.RATE_LIMIT_MAX_REQUESTS
-      ? parseInt(env.RATE_LIMIT_MAX_REQUESTS, 10)
-      : DEFAULT_RATE_LIMIT.maxRequests,
-    windowSeconds: env.RATE_LIMIT_WINDOW_SECONDS
-      ? parseInt(env.RATE_LIMIT_WINDOW_SECONDS, 10)
-      : DEFAULT_RATE_LIMIT.windowSeconds,
+    // Fall back to defaults if env vars contain invalid numbers
+    maxRequests: Number.isNaN(maxRequests) ? DEFAULT_RATE_LIMIT.maxRequests : maxRequests,
+    windowSeconds: Number.isNaN(windowSeconds) ? DEFAULT_RATE_LIMIT.windowSeconds : windowSeconds,
     keyPrefix: DEFAULT_RATE_LIMIT.keyPrefix,
   };
 }
@@ -88,11 +92,18 @@ async function checkRateLimit(
   env: Env,
   config: RateLimitConfig,
 ): Promise<RateLimitResult> {
+  // CF-Connecting-IP is set by Cloudflare for all requests passing through their network.
+  // "unknown" fallback handles direct worker invocations (tests, wrangler dev without proxy).
+  // These share a rate limit bucket, which is acceptable for non-production scenarios.
   const ip = request.headers.get("CF-Connecting-IP") || "unknown";
+
+  // Rate limit keys use "rl:" prefix to avoid collision with consent data in shared KV namespace.
+  // Separate namespace would add deployment complexity for minimal benefit.
   const key = `${config.keyPrefix}${ip}`;
   const now = Math.floor(Date.now() / 1000);
 
-  // Try to get existing rate limit state
+  // Note: KV doesn't support atomic increment, so there's a small race window between
+  // read and write. For rate limiting, occasional over-counting is acceptable.
   const stored = await env.CONSENT_KV.get(key, "json") as RateLimitState | null;
 
   let state: RateLimitState;
@@ -114,7 +125,9 @@ async function checkRateLimit(
   const allowed = state.count <= config.maxRequests;
   const remaining = Math.max(0, config.maxRequests - state.count);
 
-  // Only update KV if request is allowed (don't count blocked requests)
+  // Only update KV if request is allowed (don't count blocked requests).
+  // This prevents attackers from resetting their window by flooding with requests.
+  // TTL uses windowSeconds for sliding window behavior — each allowed request extends the window.
   if (allowed) {
     await env.CONSENT_KV.put(key, JSON.stringify(state), {
       expirationTtl: config.windowSeconds,
