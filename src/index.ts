@@ -482,8 +482,10 @@ async function handleAnalyticsEvent(
     }
   }
 
-  // Update time to decision stats if provided (must be positive finite number)
-  // Upper bound not enforced - legitimate slow decisions exist (e.g., user reads privacy policy)
+  // Update time to decision stats if provided (must be positive finite number).
+  // Upper bound not enforced - legitimate slow decisions exist (e.g., user reads privacy policy).
+  // Overflow risk is negligible: JS safe integer is 2^53-1, and with 90-day TTL even millions
+  // of events with max realistic timeToDecision (~1 hour = 3.6M ms) won't approach that limit.
   const meta = data.meta as { timeToDecision?: number } | undefined;
   if (
     meta?.timeToDecision &&
@@ -534,8 +536,9 @@ async function handleAnalyticsReport(
 
   // Parse and validate query params
   const domainParam = url.searchParams.get("domain");
-  // Validate domain format: labels separated by dots, no consecutive dots/hyphens
-  // Each label must start and end with alphanumeric, hyphens allowed in middle
+  // Validate domain format: labels separated by dots, no consecutive dots/hyphens.
+  // Single-label domains (e.g., "localhost") intentionally not supported for the domain
+  // query param - in local dev, the host header already provides the correct domain.
   const domainRegex = /^[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?)*$/;
   const domain =
     domainParam && domainRegex.test(domainParam)
@@ -552,7 +555,8 @@ async function handleAnalyticsReport(
     );
   }
 
-  // Validate date format (YYYY-MM-DD)
+  // Validate date format (YYYY-MM-DD). Semantic validation (e.g., Feb 30) is handled
+  // by getDateRange() which returns empty array for invalid dates via Date.parse().
   const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
   if (!dateRegex.test(fromDate) || !dateRegex.test(toDate)) {
     return jsonResponse(
@@ -562,7 +566,7 @@ async function handleAnalyticsReport(
     );
   }
 
-  // Generate date range
+  // Generate date range (returns empty for semantically invalid dates like 2026-02-30)
   const dates = getDateRange(fromDate, toDate);
   if (dates.length === 0) {
     return jsonResponse(
