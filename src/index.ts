@@ -57,7 +57,9 @@ export default {
     env: Env,
     ctx?: ExecutionContext,
   ): Promise<Response> {
-    // ctx is provided by Cloudflare runtime but not used in this worker
+    // ExecutionContext is part of Cloudflare Workers API but unused in this simple worker.
+    // Using void to suppress TypeScript unused-parameter warning while keeping the signature
+    // compatible with the Workers runtime (which always passes ctx as third argument).
     void ctx;
     const url = new URL(request.url);
     const host = url.hostname;

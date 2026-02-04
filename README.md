@@ -44,7 +44,7 @@ Response (version mismatch - triggers re-consent):
 {
   "found": false,
   "versionMismatch": true,
-  "storedVersion": "1"
+  "storedVersion": "1"  // The version stored in KV (null for legacy consents without version)
 }
 ```
 
