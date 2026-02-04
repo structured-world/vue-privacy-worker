@@ -38,7 +38,7 @@ describe("Rate Limiting", () => {
   });
 
   it("should include rate limit headers on successful requests", async () => {
-    const request = createRequest("GET", "/api/geo");
+    const request = createRequest("GET", "/api/consent?id=rate-limit-test");
     const ctx = createExecutionContext();
 
     const response = await worker.fetch(request, env, ctx);
@@ -56,7 +56,7 @@ describe("Rate Limiting", () => {
 
     // First request
     const response1 = await worker.fetch(
-      createRequest("GET", "/api/geo", { ip }),
+      createRequest("GET", "/api/consent?id=rate-limit-test", { ip }),
       env,
       ctx,
     );
@@ -66,7 +66,7 @@ describe("Rate Limiting", () => {
     // Second request from same IP
     const ctx2 = createExecutionContext();
     const response2 = await worker.fetch(
-      createRequest("GET", "/api/geo", { ip }),
+      createRequest("GET", "/api/consent?id=rate-limit-test", { ip }),
       env,
       ctx2,
     );
@@ -77,7 +77,7 @@ describe("Rate Limiting", () => {
   it("should track different IPs separately", async () => {
     const ctx1 = createExecutionContext();
     const response1 = await worker.fetch(
-      createRequest("GET", "/api/geo", { ip: "10.0.0.1" }),
+      createRequest("GET", "/api/consent?id=rate-limit-test", { ip: "10.0.0.1" }),
       env,
       ctx1,
     );
@@ -85,7 +85,7 @@ describe("Rate Limiting", () => {
 
     const ctx2 = createExecutionContext();
     const response2 = await worker.fetch(
-      createRequest("GET", "/api/geo", { ip: "10.0.0.2" }),
+      createRequest("GET", "/api/consent?id=rate-limit-test", { ip: "10.0.0.2" }),
       env,
       ctx2,
     );
@@ -108,7 +108,7 @@ describe("Rate Limiting", () => {
 
     const ctx = createExecutionContext();
     const response = await worker.fetch(
-      createRequest("GET", "/api/geo", { ip }),
+      createRequest("GET", "/api/consent?id=rate-limit-test", { ip }),
       env,
       ctx,
     );
@@ -149,7 +149,7 @@ describe("Rate Limiting", () => {
   });
 
   it("should expose rate limit headers via CORS", async () => {
-    const request = createRequest("GET", "/api/geo");
+    const request = createRequest("GET", "/api/consent?id=rate-limit-test");
     const ctx = createExecutionContext();
 
     const response = await worker.fetch(request, env, ctx);
@@ -181,7 +181,7 @@ describe("Rate Limit Configuration", () => {
 
     const ctx = createExecutionContext();
     const response = await worker.fetch(
-      createRequest("GET", "/api/geo", { ip }),
+      createRequest("GET", "/api/consent?id=rate-limit-test", { ip }),
       customEnv,
       ctx,
     );
@@ -203,7 +203,7 @@ describe("Rate Limit Configuration", () => {
 
     const ctx = createExecutionContext();
     const response = await worker.fetch(
-      createRequest("GET", "/api/geo", { ip }),
+      createRequest("GET", "/api/consent?id=rate-limit-test", { ip }),
       customEnv,
       ctx,
     );
@@ -222,7 +222,7 @@ describe("Rate Limit Configuration", () => {
 
     const ctx = createExecutionContext();
     const response = await worker.fetch(
-      createRequest("GET", "/api/geo", { ip }),
+      createRequest("GET", "/api/consent?id=rate-limit-test", { ip }),
       customEnv,
       ctx,
     );
@@ -255,7 +255,7 @@ describe("Rate Limit Window Expiry", () => {
 
     const ctx = createExecutionContext();
     const response = await worker.fetch(
-      createRequest("GET", "/api/geo", { ip }),
+      createRequest("GET", "/api/consent?id=rate-limit-test", { ip }),
       env,
       ctx,
     );
@@ -279,7 +279,7 @@ describe("Rate Limit Window Expiry", () => {
 
     const ctx = createExecutionContext();
     const response = await worker.fetch(
-      createRequest("GET", "/api/geo", { ip }),
+      createRequest("GET", "/api/consent?id=rate-limit-test", { ip }),
       env,
       ctx,
     );
@@ -327,16 +327,8 @@ describe("Consent API with Rate Limiting", () => {
     expect(response.headers.get("X-RateLimit-Limit")).toBe("100");
   });
 
-  it("should include rate limit headers on 404 responses", async () => {
-    const request = createRequest("GET", "/api/unknown");
-
-    const ctx = createExecutionContext();
-    const response = await worker.fetch(request, env, ctx);
-    await waitOnExecutionContext(ctx);
-
-    expect(response.status).toBe(404);
-    expect(response.headers.get("X-RateLimit-Limit")).toBe("100");
-  });
+  // Note: Rate limiting only applies to /api/consent endpoints.
+  // Other endpoints (geo, analytics, 404) do not have rate limit headers.
 });
 
 describe("Rate Limit Corrupted Data Handling", () => {
@@ -360,7 +352,7 @@ describe("Rate Limit Corrupted Data Handling", () => {
 
     const ctx = createExecutionContext();
     const response = await worker.fetch(
-      createRequest("GET", "/api/geo", { ip }),
+      createRequest("GET", "/api/consent?id=rate-limit-test", { ip }),
       env,
       ctx,
     );
@@ -383,7 +375,7 @@ describe("Rate Limit Corrupted Data Handling", () => {
 
     const ctx = createExecutionContext();
     const response = await worker.fetch(
-      createRequest("GET", "/api/geo", { ip }),
+      createRequest("GET", "/api/consent?id=rate-limit-test", { ip }),
       env,
       ctx,
     );
@@ -406,7 +398,7 @@ describe("Rate Limit Corrupted Data Handling", () => {
 
     const ctx = createExecutionContext();
     const response = await worker.fetch(
-      createRequest("GET", "/api/geo", { ip }),
+      createRequest("GET", "/api/consent?id=rate-limit-test", { ip }),
       env,
       ctx,
     );
@@ -429,7 +421,7 @@ describe("Rate Limit Corrupted Data Handling", () => {
 
     const ctx = createExecutionContext();
     const response = await worker.fetch(
-      createRequest("GET", "/api/geo", { ip }),
+      createRequest("GET", "/api/consent?id=rate-limit-test", { ip }),
       env,
       ctx,
     );
@@ -453,7 +445,7 @@ describe("Rate Limit Corrupted Data Handling", () => {
 
     const ctx = createExecutionContext();
     const response = await worker.fetch(
-      createRequest("GET", "/api/geo", { ip }),
+      createRequest("GET", "/api/consent?id=rate-limit-test", { ip }),
       env,
       ctx,
     );

@@ -9,8 +9,10 @@ compatibility_date = "2024-12-01"
 routes = [
   { pattern = "gitlab-mcp.sw.foundation/api/consent*", zone_name = "sw.foundation" },
   { pattern = "gitlab-mcp.sw.foundation/api/geo", zone_name = "sw.foundation" },
+  { pattern = "gitlab-mcp.sw.foundation/api/analytics*", zone_name = "sw.foundation" },
   { pattern = "privacy.sw.foundation/api/consent*", zone_name = "sw.foundation" },
   { pattern = "privacy.sw.foundation/api/geo", zone_name = "sw.foundation" },
+  { pattern = "privacy.sw.foundation/api/analytics*", zone_name = "sw.foundation" },
 ]
 
 # KV namespace for consent storage (365 days TTL)
@@ -18,8 +20,25 @@ routes = [
 binding = "CONSENT_KV"
 id = "760ad4a19de244b5b24f258bec6e2e4b"
 
+# KV namespace for analytics aggregates (90 days TTL)
+# IMPORTANT: This is a placeholder for self-hosting.
+# Create your own namespace and replace the ID before deploying:
+#   wrangler kv:namespace create ANALYTICS_KV
+# The worker will return 500 error if this is not configured correctly.
+[[kv_namespaces]]
+binding = "ANALYTICS_KV"
+id = "REPLACE_WITH_YOUR_ANALYTICS_KV_ID"
+
 # Rate limiting configuration (defaults: 100 requests per 60 seconds)
+# Applies to /api/consent endpoints only. Analytics endpoints are not rate-limited.
 # Uncomment to customize:
 # [vars]
 # RATE_LIMIT_MAX_REQUESTS = "100"
 # RATE_LIMIT_WINDOW_SECONDS = "60"
+
+# Secret for admin analytics access (required for GET /api/analytics)
+# Secrets are automatically available in env.* without wrangler.toml config.
+# Set with: wrangler secret put ANALYTICS_ADMIN_TOKEN
+# The worker returns 500 "Admin access not configured" if not set.
+# For local dev, add to .dev.vars file (gitignored):
+#   ANALYTICS_ADMIN_TOKEN=your-local-token
