@@ -55,12 +55,11 @@ export default {
   async fetch(
     request: Request,
     env: Env,
-    ctx?: ExecutionContext,
+    _ctx?: ExecutionContext,
   ): Promise<Response> {
     // ExecutionContext is part of Cloudflare Workers API but unused in this simple worker.
-    // Using void to suppress TypeScript unused-parameter warning while keeping the signature
-    // compatible with the Workers runtime (which always passes ctx as third argument).
-    void ctx;
+    // Keeping the parameter in the signature ensures compatibility with the Workers runtime
+    // (which always passes ctx as third argument), while the underscore prefix indicates it is unused.
     const url = new URL(request.url);
     const host = url.hostname;
 
