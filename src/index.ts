@@ -135,7 +135,7 @@ async function checkRateLimit(
   // Only update KV if request is allowed (blocked requests don't persist to KV).
   // This prevents attackers from resetting their window by flooding with requests.
   // Note: state.count is calculated in memory but only persisted when allowed=true.
-  // TTL uses windowSeconds — the KV entry expires after windowSeconds of inactivity.
+  // TTL is set to windowSeconds on each write — entry expires windowSeconds after last allowed request.
   if (allowed) {
     await env.CONSENT_KV.put(key, JSON.stringify(state), {
       expirationTtl: config.windowSeconds,
