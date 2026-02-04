@@ -5,7 +5,8 @@
  * Per-domain isolation via KV key prefix.
  *
  * Endpoints:
- * - GET  /api/consent?id=<user_id> - Retrieve stored consent
+ * - GET  /api/consent?id=<user_id>&version=<expected_version> - Retrieve stored consent
+ *        If version param provided and doesn't match stored version, returns found: false
  * - POST /api/consent - Store consent preferences
  * - GET  /api/geo - Geo-detection via Cloudflare request.cf
  *
@@ -207,7 +208,14 @@ const ALLOWED_DOMAINS: Record<string, string[]> = {
 };
 
 export default {
-  async fetch(request: Request, env: Env, _ctx: ExecutionContext): Promise<Response> {
+  async fetch(
+    request: Request,
+    env: Env,
+    _ctx?: ExecutionContext,
+  ): Promise<Response> {
+    // ExecutionContext is part of Cloudflare Workers API but unused in this simple worker.
+    // Keeping the parameter in the signature ensures compatibility with the Workers runtime
+    // (which always passes ctx as third argument), while the underscore prefix indicates it is unused.
     const url = new URL(request.url);
     const host = url.hostname;
 
@@ -330,6 +338,9 @@ async function handleGet(
   corsHeaders: Record<string, string>,
 ): Promise<Response> {
   const userId = url.searchParams.get("id");
+  // Version param is optional - if provided, we validate against stored consent version
+  // Version comparison is case-sensitive and format-agnostic (client controls format)
+  const expectedVersion = url.searchParams.get("version");
 
   if (!userId) {
     return jsonResponse({ error: "Missing id parameter" }, 400, corsHeaders);
@@ -349,6 +360,23 @@ async function handleGet(
 
   try {
     const consent = JSON.parse(stored) as StoredConsent;
+
+    // Version validation: if expectedVersion is provided and doesn't match stored version,
+    // return found: false to force re-consent. This handles legacy consents without version
+    // field (consent.version would be undefined, triggering mismatch - correct behavior).
+    if (expectedVersion && consent.version !== expectedVersion) {
+      return jsonResponse(
+        {
+          found: false,
+          versionMismatch: true,
+          // For legacy consents without version field, storedVersion will be null
+          storedVersion: consent.version ?? null,
+        },
+        200,
+        corsHeaders,
+      );
+    }
+
     return jsonResponse({ found: true, consent }, 200, corsHeaders);
   } catch {
     return jsonResponse(

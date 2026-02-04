@@ -8,14 +8,17 @@
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
     "typecheck": "tsc --noEmit",
+    "lint": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest"
   },
   "devDependencies": {
     "@cloudflare/vitest-pool-workers": "^0.12.9",
-    "@cloudflare/workers-types": "^4.20241230.0",
-    "typescript": "^5.7.2",
-    "vitest": "^3.0.0",
+    "@cloudflare/workers-types": "^4.20250124.0",
+    "@vitest/runner": "^3.2.0",
+    "@vitest/snapshot": "^3.2.0",
+    "typescript": "^5.7.3",
+    "vitest": "^3.2.0",
     "wrangler": "^4.61.1"
   }
 }

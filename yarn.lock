@@ -111,10 +111,10 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@cloudflare/workers-types@npm:^4.20241230.0":
-  version: 4.20260131.0
-  resolution: "@cloudflare/workers-types@npm:4.20260131.0"
-  checksum: 10c0/6ace0ed2c5552dd04b9ef45fec83dd8d3ead16340daae5aa1ead8e6e613753823dd6e5b09d1e387316353f399ac87fd17a59562931108adfc24da4f2b1f296df
+"@cloudflare/workers-types@npm:^4.20250124.0":
+  version: 4.20260203.0
+  resolution: "@cloudflare/workers-types@npm:4.20260203.0"
+  checksum: 10c0/6e005e1fa2a2dd848eeca6b10febaf422df63be85adf7f8cf558a26ca11c37dd38e01c42a3cff13f93561a6e7ac4ff68f2d5c971e202b5e29cb7d7a9ab3f66ad
   languageName: node
   linkType: hard
 
@@ -1079,7 +1079,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@vitest/runner@npm:3.2.4":
+"@vitest/runner@npm:3.2.4, @vitest/runner@npm:^3.2.0":
   version: 3.2.4
   resolution: "@vitest/runner@npm:3.2.4"
   dependencies:
@@ -1090,7 +1090,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@vitest/snapshot@npm:3.2.4":
+"@vitest/snapshot@npm:3.2.4, @vitest/snapshot@npm:^3.2.0":
   version: 3.2.4
   resolution: "@vitest/snapshot@npm:3.2.4"
   dependencies:
@@ -2245,7 +2245,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"typescript@npm:^5.7.2":
+"typescript@npm:^5.7.3":
   version: 5.9.3
   resolution: "typescript@npm:5.9.3"
   bin:
@@ -2255,7 +2255,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"typescript@patch:typescript@npm%3A^5.7.2#optional!builtin<compat/typescript>":
+"typescript@patch:typescript@npm%3A^5.7.3#optional!builtin<compat/typescript>":
   version: 5.9.3
   resolution: "typescript@patch:typescript@npm%3A5.9.3#optional!builtin<compat/typescript>::version=5.9.3&hash=5786d5"
   bin:
@@ -2369,7 +2369,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"vitest@npm:^3.0.0":
+"vitest@npm:^3.2.0":
   version: 3.2.4
   resolution: "vitest@npm:3.2.4"
   dependencies:
@@ -2430,9 +2430,11 @@ __metadata:
   resolution: "vue-privacy-worker@workspace:."
   dependencies:
     "@cloudflare/vitest-pool-workers": "npm:^0.12.9"
-    "@cloudflare/workers-types": "npm:^4.20241230.0"
-    typescript: "npm:^5.7.2"
-    vitest: "npm:^3.0.0"
+    "@cloudflare/workers-types": "npm:^4.20250124.0"
+    "@vitest/runner": "npm:^3.2.0"
+    "@vitest/snapshot": "npm:^3.2.0"
+    typescript: "npm:^5.7.3"
+    vitest: "npm:^3.2.0"
     wrangler: "npm:^4.61.1"
   languageName: unknown
   linkType: soft
