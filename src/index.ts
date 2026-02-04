@@ -75,10 +75,17 @@ function getRateLimitConfig(env: Env): RateLimitConfig {
     ? parseInt(env.RATE_LIMIT_WINDOW_SECONDS, 10)
     : DEFAULT_RATE_LIMIT.windowSeconds;
 
+  // Fall back to defaults if env vars contain invalid numbers (NaN or <= 0)
+  const validMaxRequests = Number.isNaN(maxRequests) || maxRequests <= 0
+    ? DEFAULT_RATE_LIMIT.maxRequests
+    : maxRequests;
+  const validWindowSeconds = Number.isNaN(windowSeconds) || windowSeconds <= 0
+    ? DEFAULT_RATE_LIMIT.windowSeconds
+    : windowSeconds;
+
   return {
-    // Fall back to defaults if env vars contain invalid numbers
-    maxRequests: Number.isNaN(maxRequests) ? DEFAULT_RATE_LIMIT.maxRequests : maxRequests,
-    windowSeconds: Number.isNaN(windowSeconds) ? DEFAULT_RATE_LIMIT.windowSeconds : windowSeconds,
+    maxRequests: validMaxRequests,
+    windowSeconds: validWindowSeconds,
     keyPrefix: DEFAULT_RATE_LIMIT.keyPrefix,
   };
 }
@@ -125,9 +132,10 @@ async function checkRateLimit(
   const allowed = state.count <= config.maxRequests;
   const remaining = Math.max(0, config.maxRequests - state.count);
 
-  // Only update KV if request is allowed (don't count blocked requests).
+  // Only update KV if request is allowed (blocked requests don't persist to KV).
   // This prevents attackers from resetting their window by flooding with requests.
-  // TTL uses windowSeconds for sliding window behavior — each allowed request extends the window.
+  // Note: state.count is calculated in memory but only persisted when allowed=true.
+  // TTL uses windowSeconds — the KV entry expires after windowSeconds of inactivity.
   if (allowed) {
     await env.CONSENT_KV.put(key, JSON.stringify(state), {
       expirationTtl: config.windowSeconds,
