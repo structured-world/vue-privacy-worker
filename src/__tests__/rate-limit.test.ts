@@ -163,6 +163,134 @@ describe("Rate Limiting", () => {
   });
 });
 
+describe("Rate Limit Configuration", () => {
+  beforeEach(async () => {
+    const keys = await env.CONSENT_KV.list({ prefix: "rl:" });
+    for (const key of keys.keys) {
+      await env.CONSENT_KV.delete(key.name);
+    }
+  });
+
+  it("should use custom RATE_LIMIT_MAX_REQUESTS from env", async () => {
+    const ip = "10.0.0.50";
+    // Create custom env with lower limit
+    const customEnv = {
+      ...env,
+      RATE_LIMIT_MAX_REQUESTS: "5",
+    };
+
+    const ctx = createExecutionContext();
+    const response = await worker.fetch(
+      createRequest("GET", "/api/geo", { ip }),
+      customEnv,
+      ctx,
+    );
+    await waitOnExecutionContext(ctx);
+
+    // Should use custom limit of 5
+    expect(response.headers.get("X-RateLimit-Limit")).toBe("5");
+    expect(response.headers.get("X-RateLimit-Remaining")).toBe("4");
+  });
+
+  it("should fall back to defaults for invalid env values", async () => {
+    const ip = "10.0.0.51";
+    // Create env with invalid values
+    const customEnv = {
+      ...env,
+      RATE_LIMIT_MAX_REQUESTS: "invalid",
+      RATE_LIMIT_WINDOW_SECONDS: "-10",
+    };
+
+    const ctx = createExecutionContext();
+    const response = await worker.fetch(
+      createRequest("GET", "/api/geo", { ip }),
+      customEnv,
+      ctx,
+    );
+    await waitOnExecutionContext(ctx);
+
+    // Should fall back to default of 100
+    expect(response.headers.get("X-RateLimit-Limit")).toBe("100");
+  });
+
+  it("should fall back to defaults for zero values", async () => {
+    const ip = "10.0.0.52";
+    const customEnv = {
+      ...env,
+      RATE_LIMIT_MAX_REQUESTS: "0",
+    };
+
+    const ctx = createExecutionContext();
+    const response = await worker.fetch(
+      createRequest("GET", "/api/geo", { ip }),
+      customEnv,
+      ctx,
+    );
+    await waitOnExecutionContext(ctx);
+
+    // Should fall back to default, not block all requests
+    expect(response.headers.get("X-RateLimit-Limit")).toBe("100");
+    expect(response.status).toBe(200);
+  });
+});
+
+describe("Rate Limit Window Expiry", () => {
+  beforeEach(async () => {
+    const keys = await env.CONSENT_KV.list({ prefix: "rl:" });
+    for (const key of keys.keys) {
+      await env.CONSENT_KV.delete(key.name);
+    }
+  });
+
+  it("should reset count when window expires", async () => {
+    const ip = "10.0.0.60";
+
+    // Set rate limit state with expired window (resetAt in the past)
+    const expiredResetAt = Math.floor(Date.now() / 1000) - 10; // 10 seconds ago
+    await env.CONSENT_KV.put(
+      `rl:${ip}`,
+      JSON.stringify({ count: 99, resetAt: expiredResetAt }),
+      { expirationTtl: 60 },
+    );
+
+    const ctx = createExecutionContext();
+    const response = await worker.fetch(
+      createRequest("GET", "/api/geo", { ip }),
+      env,
+      ctx,
+    );
+    await waitOnExecutionContext(ctx);
+
+    // Window expired, should start fresh with count=1, remaining=99
+    expect(response.status).toBe(200);
+    expect(response.headers.get("X-RateLimit-Remaining")).toBe("99");
+  });
+
+  it("should maintain count within active window", async () => {
+    const ip = "10.0.0.61";
+
+    // Set rate limit state with active window (resetAt in the future)
+    const activeResetAt = Math.floor(Date.now() / 1000) + 60; // 60 seconds from now
+    await env.CONSENT_KV.put(
+      `rl:${ip}`,
+      JSON.stringify({ count: 50, resetAt: activeResetAt }),
+      { expirationTtl: 60 },
+    );
+
+    const ctx = createExecutionContext();
+    const response = await worker.fetch(
+      createRequest("GET", "/api/geo", { ip }),
+      env,
+      ctx,
+    );
+    await waitOnExecutionContext(ctx);
+
+    // Window still active, should increment: count=51, remaining=49
+    expect(response.status).toBe(200);
+    expect(response.headers.get("X-RateLimit-Remaining")).toBe("49");
+  });
+});
+
 describe("Consent API with Rate Limiting", () => {
   beforeEach(async () => {
     // Clear KV
