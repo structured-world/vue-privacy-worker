@@ -3,7 +3,7 @@ import {
   createExecutionContext,
   waitOnExecutionContext,
 } from "cloudflare:test";
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, afterEach } from "vitest";
 import worker from "../index";
 
 const TEST_HOST = "gitlab-mcp.sw.foundation";
@@ -259,7 +259,8 @@ describe("Consent API", () => {
         `/api/consent?id=${userId}&version=`,
       );
 
-      // Assert: consent returned (empty string is falsy)
+      // Assert: consent returned because empty version param is treated as "no version check"
+      // (empty string is falsy in JavaScript, so `if (expectedVersion && ...)` skips validation)
       expect(status).toBe(200);
       expect(data.found).toBe(true);
     });
@@ -415,10 +416,15 @@ describe("Consent API", () => {
     });
 
     it("should include CORS headers in response", async () => {
-      const { status } = await fetchWorker("/api/consent?id=test");
+      const request = createRequest("/api/consent?id=test");
+      const ctx = createExecutionContext();
+      const response = await worker.fetch(request, env, ctx);
+      await waitOnExecutionContext(ctx);
 
-      expect(status).toBe(200);
-      // CORS headers are set by the worker
+      expect(response.status).toBe(200);
+      expect(response.headers.get("Access-Control-Allow-Origin")).toBe(TEST_ORIGIN);
+      expect(response.headers.get("Access-Control-Allow-Methods")).toContain("GET");
+      expect(response.headers.get("Access-Control-Allow-Headers")).toContain("Content-Type");
     });
   });
 
