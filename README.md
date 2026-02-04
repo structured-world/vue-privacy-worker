@@ -8,6 +8,7 @@ Cloudflare Worker companion for [@structured-world/vue-privacy](https://github.c
 - 365-day TTL for consent storage
 - Simple REST API (GET/POST)
 - CORS support with per-domain configuration
+- Rate limiting per IP address (configurable)
 
 ## API
 
@@ -68,6 +69,58 @@ Response:
 
 Example: `example.com:abc123-def456`
 
+## Rate Limiting
+
+The worker implements per-IP rate limiting to prevent abuse.
+
+### Default Limits
+
+- **100 requests per minute** per IP address
+- Applies to all endpoints (except OPTIONS preflight)
+
+### Customizing Limits
+
+Override defaults via `wrangler.toml` variables:
+
+```toml
+[vars]
+RATE_LIMIT_MAX_REQUESTS = "200"    # requests per window
+RATE_LIMIT_WINDOW_SECONDS = "120"  # 2 minute window
+```
+
+### Response Headers
+
+All responses include rate limit headers:
+
+| Header | Description |
+|--------|-------------|
+| `X-RateLimit-Limit` | Maximum requests allowed per window |
+| `X-RateLimit-Remaining` | Requests remaining in current window |
+| `X-RateLimit-Reset` | Unix timestamp when window resets |
+
+### Rate Limit Exceeded (429)
+
+When limit is exceeded:
+
+```json
+{
+  "error": "rate_limit_exceeded",
+  "retryAfter": 45
+}
+```
+
+Response headers include `Retry-After` with seconds until window resets.
+
+### KV Key Format for Rate Limits
+
+Rate limit state is stored in KV with prefix `rl:`:
+
+```
+rl:{ip_address}
+```
+
+Entries auto-expire after the configured window.
+
 ## Self-Hosting
 
 1. Fork this repository
@@ -97,7 +150,7 @@ npm run deploy   # Manual deploy
 
 ## Status & Roadmap
 
-### Current (v1.0)
+### Current (v1.1)
 
 | Feature | Status |
 |---------|--------|
@@ -106,13 +159,13 @@ npm run deploy   # Manual deploy
 | 365-day TTL storage | Done |
 | CORS configuration | Done |
 | GitHub Actions deploy | Done |
+| Rate limiting | Done |
 
 ### Planned
 
 | Feature | Description |
 |---------|-------------|
 | vue-privacy integration | Automatic sync with `@structured-world/vue-privacy` storage backend |
-| Rate limiting | Prevent abuse via KV-based rate limiting |
 | Consent versioning | Track consent version changes |
 | Bulk export | Admin API for compliance exports |
 | Analytics events | Optional consent analytics (opt-in rates) |

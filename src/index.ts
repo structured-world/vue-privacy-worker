@@ -14,8 +14,29 @@
  * TTL: 365 days
  */
 
-interface Env {
+export interface Env {
   CONSENT_KV: KVNamespace;
+  // Rate limit configuration (from wrangler.toml [vars])
+  RATE_LIMIT_MAX_REQUESTS?: string;
+  RATE_LIMIT_WINDOW_SECONDS?: string;
+}
+
+interface RateLimitConfig {
+  maxRequests: number;
+  windowSeconds: number;
+  keyPrefix: string;
+}
+
+interface RateLimitState {
+  count: number;
+  resetAt: number;
+}
+
+interface RateLimitResult {
+  allowed: boolean;
+  remaining: number;
+  resetAt: number;
+  limit: number;
 }
 
 interface ConsentData {
@@ -36,6 +57,115 @@ interface StoredConsent extends ConsentData {
 
 const CONSENT_TTL_SECONDS = 365 * 24 * 60 * 60; // 365 days
 
+// Default rate limit values (can be overridden via wrangler.toml [vars])
+const DEFAULT_RATE_LIMIT: RateLimitConfig = {
+  maxRequests: 100,
+  windowSeconds: 60,
+  keyPrefix: "rl:",
+};
+
+/**
+ * Get rate limit configuration from environment or defaults
+ */
+function getRateLimitConfig(env: Env): RateLimitConfig {
+  return {
+    maxRequests: env.RATE_LIMIT_MAX_REQUESTS
+      ? parseInt(env.RATE_LIMIT_MAX_REQUESTS, 10)
+      : DEFAULT_RATE_LIMIT.maxRequests,
+    windowSeconds: env.RATE_LIMIT_WINDOW_SECONDS
+      ? parseInt(env.RATE_LIMIT_WINDOW_SECONDS, 10)
+      : DEFAULT_RATE_LIMIT.windowSeconds,
+    keyPrefix: DEFAULT_RATE_LIMIT.keyPrefix,
+  };
+}
+
+/**
+ * Check and update rate limit for an IP address
+ * Uses KV with TTL for automatic expiration
+ */
+async function checkRateLimit(
+  request: Request,
+  env: Env,
+  config: RateLimitConfig,
+): Promise<RateLimitResult> {
+  const ip = request.headers.get("CF-Connecting-IP") || "unknown";
+  const key = `${config.keyPrefix}${ip}`;
+  const now = Math.floor(Date.now() / 1000);
+
+  // Try to get existing rate limit state
+  const stored = await env.CONSENT_KV.get(key, "json") as RateLimitState | null;
+
+  let state: RateLimitState;
+
+  if (stored && stored.resetAt > now) {
+    // Existing window still active
+    state = {
+      count: stored.count + 1,
+      resetAt: stored.resetAt,
+    };
+  } else {
+    // New window (first request or window expired)
+    state = {
+      count: 1,
+      resetAt: now + config.windowSeconds,
+    };
+  }
+
+  const allowed = state.count <= config.maxRequests;
+  const remaining = Math.max(0, config.maxRequests - state.count);
+
+  // Only update KV if request is allowed (don't count blocked requests)
+  if (allowed) {
+    await env.CONSENT_KV.put(key, JSON.stringify(state), {
+      expirationTtl: config.windowSeconds,
+    });
+  }
+
+  return {
+    allowed,
+    remaining,
+    resetAt: state.resetAt,
+    limit: config.maxRequests,
+  };
+}
+
+/**
+ * Add rate limit headers to a Headers object
+ */
+function addRateLimitHeaders(
+  headers: Record<string, string>,
+  result: RateLimitResult,
+): Record<string, string> {
+  return {
+    ...headers,
+    "X-RateLimit-Limit": result.limit.toString(),
+    "X-RateLimit-Remaining": result.remaining.toString(),
+    "X-RateLimit-Reset": result.resetAt.toString(),
+  };
+}
+
+/**
+ * Create a 429 Too Many Requests response
+ */
+function rateLimitResponse(
+  corsHeaders: Record<string, string>,
+  result: RateLimitResult,
+): Response {
+  const headers = addRateLimitHeaders(corsHeaders, result);
+  headers["Retry-After"] = Math.max(1, result.resetAt - Math.floor(Date.now() / 1000)).toString();
+
+  return new Response(
+    JSON.stringify({
+      error: "rate_limit_exceeded",
+      retryAfter: parseInt(headers["Retry-After"], 10),
+    }),
+    {
+      status: 429,
+      headers: { ...headers, "Content-Type": "application/json" },
+    },
+  );
+}
+
 // Allowed origins per domain
 const ALLOWED_DOMAINS: Record<string, string[]> = {
   "gitlab-mcp.sw.foundation": [
@@ -51,7 +181,7 @@ const ALLOWED_DOMAINS: Record<string, string[]> = {
 };
 
 export default {
-  async fetch(request: Request, env: Env): Promise<Response> {
+  async fetch(request: Request, env: Env, _ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
     const host = url.hostname;
 
@@ -59,21 +189,12 @@ export default {
     const origin = request.headers.get("Origin") || "";
     const corsHeaders = getCorsHeaders(host, origin);
 
-    // Handle CORS preflight
+    // Handle CORS preflight (no rate limiting for OPTIONS)
     if (request.method === "OPTIONS") {
       return new Response(null, { status: 204, headers: corsHeaders });
     }
 
-    // Geo-detection endpoint (no KV needed)
-    if (url.pathname === "/api/geo" && request.method === "GET") {
-      return handleGeo(request, corsHeaders);
-    }
-
-    if (url.pathname !== "/api/consent") {
-      return new Response("Not Found", { status: 404 });
-    }
-
-    // Check KV binding
+    // Check KV binding (required for rate limiting and consent storage)
     if (!env.CONSENT_KV) {
       return jsonResponse(
         { error: "Storage not configured" },
@@ -82,23 +203,43 @@ export default {
       );
     }
 
+    // Check rate limit for all non-OPTIONS requests
+    const rateLimitConfig = getRateLimitConfig(env);
+    const rateLimitResult = await checkRateLimit(request, env, rateLimitConfig);
+
+    if (!rateLimitResult.allowed) {
+      return rateLimitResponse(corsHeaders, rateLimitResult);
+    }
+
+    // Add rate limit headers to all responses
+    const headersWithRateLimit = addRateLimitHeaders(corsHeaders, rateLimitResult);
+
+    // Geo-detection endpoint
+    if (url.pathname === "/api/geo" && request.method === "GET") {
+      return handleGeo(request, headersWithRateLimit);
+    }
+
+    if (url.pathname !== "/api/consent") {
+      return new Response("Not Found", { status: 404, headers: headersWithRateLimit });
+    }
+
     try {
       if (request.method === "GET") {
-        return handleGet(url, host, env, corsHeaders);
+        return handleGet(url, host, env, headersWithRateLimit);
       }
 
       if (request.method === "POST") {
-        return handlePost(request, host, env, corsHeaders);
+        return handlePost(request, host, env, headersWithRateLimit);
       }
 
       return new Response("Method Not Allowed", {
         status: 405,
-        headers: corsHeaders,
+        headers: headersWithRateLimit,
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : "Unknown error";
       console.error("Consent storage error:", message);
-      return jsonResponse({ error: "Internal error" }, 500, corsHeaders);
+      return jsonResponse({ error: "Internal error" }, 500, headersWithRateLimit);
     }
   },
 };
@@ -111,6 +252,7 @@ function getCorsHeaders(host: string, origin: string): Record<string, string> {
     "Access-Control-Allow-Origin": allowed,
     "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
     "Access-Control-Allow-Headers": "Content-Type",
+    "Access-Control-Expose-Headers": "X-RateLimit-Limit, X-RateLimit-Remaining, X-RateLimit-Reset, Retry-After",
     "Access-Control-Max-Age": "86400",
   };
 }

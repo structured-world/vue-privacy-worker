@@ -17,3 +17,9 @@ routes = [
 [[kv_namespaces]]
 binding = "CONSENT_KV"
 id = "760ad4a19de244b5b24f258bec6e2e4b"
+
+# Rate limiting configuration (defaults: 100 requests per 60 seconds)
+# Uncomment to customize:
+# [vars]
+# RATE_LIMIT_MAX_REQUESTS = "100"
+# RATE_LIMIT_WINDOW_SECONDS = "60"
