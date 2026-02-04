@@ -115,7 +115,7 @@ The worker supports consent versioning to handle privacy policy changes. When yo
 // Your app config
 const CONSENT_VERSION = "2.0"; // Bump when policy changes
 
-// Check existing consent
+// Check existing consent (relative URL works when served from same domain as the worker)
 const response = await fetch(`/api/consent?id=${userId}&version=${CONSENT_VERSION}`);
 const { found, versionMismatch } = await response.json();
 
