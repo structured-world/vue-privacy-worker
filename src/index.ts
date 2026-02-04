@@ -433,9 +433,12 @@ async function handleAnalyticsEvent(
   analytics[eventType as keyof Pick<DailyAnalytics, AnalyticsEventType>]++;
 
   // Update category stats if categories provided
+  // typeof check on each property handles arrays, null, and other non-object types safely
   const categories = data.categories as Record<string, boolean> | undefined;
   if (
     categories &&
+    typeof categories === "object" &&
+    !Array.isArray(categories) &&
     (eventType === "consent_given" || eventType === "consent_updated")
   ) {
     for (const cat of ["analytics", "marketing", "functional"] as const) {
@@ -449,12 +452,14 @@ async function handleAnalyticsEvent(
     }
   }
 
-  // Update time to decision stats if provided (must be positive)
+  // Update time to decision stats if provided (must be positive finite number)
+  // Upper bound not enforced - legitimate slow decisions exist (e.g., user reads privacy policy)
   const meta = data.meta as { timeToDecision?: number } | undefined;
   if (
     meta?.timeToDecision &&
     typeof meta.timeToDecision === "number" &&
-    meta.timeToDecision > 0
+    meta.timeToDecision > 0 &&
+    Number.isFinite(meta.timeToDecision)
   ) {
     analytics.timeToDecision.sum += meta.timeToDecision;
     analytics.timeToDecision.count++;
@@ -490,6 +495,9 @@ async function handleAnalyticsReport(
   }
 
   const token = authHeader.slice(7);
+  // Simple string comparison is acceptable for internal admin API.
+  // Timing attacks require network proximity and high precision;
+  // the latency variance in KV/network operations provides natural noise.
   if (token !== env.ANALYTICS_ADMIN_TOKEN) {
     return jsonResponse({ error: "Invalid token" }, 403, corsHeaders);
   }
@@ -548,7 +556,12 @@ async function handleAnalyticsReport(
     const kvKey = getAnalyticsKey(domain, date);
     const stored = await env.ANALYTICS_KV.get(kvKey);
     if (stored) {
-      dailyData.push({ date, data: JSON.parse(stored) as DailyAnalytics });
+      try {
+        dailyData.push({ date, data: JSON.parse(stored) as DailyAnalytics });
+      } catch {
+        // Skip corrupted entries - data integrity issues are logged but don't fail the report
+        console.error(`Corrupted analytics data for ${kvKey}`);
+      }
     }
   }
 
@@ -633,10 +646,13 @@ function calculateAcceptRate(stats: { accepted: number; rejected: number }): num
   return Math.round((stats.accepted / total) * 1000) / 1000;
 }
 
+// Generate array of dates between from and to (inclusive)
+// Future dates are allowed - admin may want to see empty report for upcoming period
+// setDate() correctly handles month boundaries in JavaScript
 function getDateRange(from: string, to: string): string[] {
   const dates: string[] = [];
-  const fromDate = new Date(from);
-  const toDate = new Date(to);
+  const fromDate = new Date(from + "T00:00:00Z");
+  const toDate = new Date(to + "T00:00:00Z");
 
   if (isNaN(fromDate.getTime()) || isNaN(toDate.getTime())) {
     return [];
@@ -649,7 +665,7 @@ function getDateRange(from: string, to: string): string[] {
   const current = new Date(fromDate);
   while (current <= toDate) {
     dates.push(current.toISOString().split("T")[0]);
-    current.setDate(current.getDate() + 1);
+    current.setUTCDate(current.getUTCDate() + 1);
   }
 
   return dates;
