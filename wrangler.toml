@@ -29,7 +29,9 @@ id = "760ad4a19de244b5b24f258bec6e2e4b"
 binding = "ANALYTICS_KV"
 id = "REPLACE_WITH_YOUR_ANALYTICS_KV_ID"
 
-# Secret for admin analytics access
+# Secret for admin analytics access (required for GET /api/analytics)
+# Secrets are automatically available in env.* without wrangler.toml config.
 # Set with: wrangler secret put ANALYTICS_ADMIN_TOKEN
-# [vars]
-# ANALYTICS_ADMIN_TOKEN is set via wrangler secret, not here
+# The worker returns 500 "Admin access not configured" if not set.
+# For local dev, add to .dev.vars file (gitignored):
+#   ANALYTICS_ADMIN_TOKEN=your-local-token

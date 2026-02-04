@@ -170,6 +170,10 @@ Analytics are designed with privacy in mind:
 - **90-day retention** — Analytics auto-expire after 90 days
 - **Domain isolation** — Each domain's analytics are separate
 
+### Known Limitations
+
+- **Eventual consistency** — Analytics use KV read-modify-write which has inherent race conditions under high concurrency. Multiple simultaneous events may cause minor count loss. For most consent banner use cases (low-to-moderate traffic), accuracy is sufficient. If exact counts are critical, consider using Durable Objects instead.
+
 ## KV Key Format
 
 ```

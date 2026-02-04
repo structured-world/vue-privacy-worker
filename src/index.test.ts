@@ -462,6 +462,49 @@ describe("Analytics API", () => {
     expect(status).toBe(200);
     expect(data.success).toBe(true);
   });
+
+  // Test domain parameter validation - invalid domains fall back to host
+  it("GET /api/analytics ignores invalid domain parameter with consecutive dots", async () => {
+    const today = new Date().toISOString().split("T")[0];
+    const request = createRequest(
+      "GET",
+      `/api/analytics?from=${today}&to=${today}&domain=example..com`,
+      { authorization: "Bearer test-admin-token" },
+    );
+    const { status, data } = await fetchJson<{ domain: string }>(request, env);
+
+    // Invalid domain falls back to host (privacy.sw.foundation)
+    expect(status).toBe(200);
+    expect(data.domain).toBe("privacy.sw.foundation");
+  });
+
+  // Test domain parameter validation - valid domain is accepted
+  it("GET /api/analytics accepts valid domain parameter", async () => {
+    const today = new Date().toISOString().split("T")[0];
+    const request = createRequest(
+      "GET",
+      `/api/analytics?from=${today}&to=${today}&domain=example.com`,
+      { authorization: "Bearer test-admin-token" },
+    );
+    const { status, data } = await fetchJson<{ domain: string }>(request, env);
+
+    expect(status).toBe(200);
+    expect(data.domain).toBe("example.com");
+  });
+
+  // Test domain parameter validation - domain with special chars falls back to host
+  it("GET /api/analytics ignores domain with special characters", async () => {
+    const today = new Date().toISOString().split("T")[0];
+    const request = createRequest(
+      "GET",
+      `/api/analytics?from=${today}&to=${today}&domain=example@bad.com`,
+      { authorization: "Bearer test-admin-token" },
+    );
+    const { status, data } = await fetchJson<{ domain: string }>(request, env);
+
+    expect(status).toBe(200);
+    expect(data.domain).toBe("privacy.sw.foundation");
+  });
 });
 
 describe("CORS", () => {

@@ -534,9 +534,11 @@ async function handleAnalyticsReport(
 
   // Parse and validate query params
   const domainParam = url.searchParams.get("domain");
-  // Validate domain format if provided (alphanumeric, dots, hyphens only)
+  // Validate domain format: labels separated by dots, no consecutive dots/hyphens
+  // Each label must start and end with alphanumeric, hyphens allowed in middle
+  const domainRegex = /^[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?)*$/;
   const domain =
-    domainParam && /^[a-zA-Z0-9][a-zA-Z0-9.-]*[a-zA-Z0-9]$/.test(domainParam)
+    domainParam && domainRegex.test(domainParam)
       ? domainParam
       : host;
   const fromDate = url.searchParams.get("from");
