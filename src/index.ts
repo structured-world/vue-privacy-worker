@@ -115,7 +115,12 @@ async function checkRateLimit(
 
   let state: RateLimitState;
 
-  if (stored && stored.resetAt > now) {
+  // Validate stored data structure (guard against corrupted KV entries)
+  const isValidState = stored &&
+    typeof stored.count === "number" && !Number.isNaN(stored.count) &&
+    typeof stored.resetAt === "number" && !Number.isNaN(stored.resetAt);
+
+  if (isValidState && stored.resetAt > now) {
     // Existing window still active
     state = {
       count: stored.count + 1,
@@ -225,15 +230,24 @@ export default {
     }
 
     // Check rate limit for all non-OPTIONS requests
-    const rateLimitConfig = getRateLimitConfig(env);
-    const rateLimitResult = await checkRateLimit(request, env, rateLimitConfig);
+    // On KV errors, allow request to proceed (fail-open for availability)
+    let rateLimitResult: RateLimitResult | null = null;
+    try {
+      const rateLimitConfig = getRateLimitConfig(env);
+      rateLimitResult = await checkRateLimit(request, env, rateLimitConfig);
+    } catch (err) {
+      // Log error but don't block request — prefer availability over strict rate limiting
+      console.error("Rate limit check failed:", err instanceof Error ? err.message : err);
+    }
 
-    if (!rateLimitResult.allowed) {
+    if (rateLimitResult && !rateLimitResult.allowed) {
       return rateLimitResponse(corsHeaders, rateLimitResult);
     }
 
-    // Add rate limit headers to all responses
-    const headersWithRateLimit = addRateLimitHeaders(corsHeaders, rateLimitResult);
+    // Add rate limit headers to all responses (if rate limit check succeeded)
+    const headersWithRateLimit = rateLimitResult
+      ? addRateLimitHeaders(corsHeaders, rateLimitResult)
+      : corsHeaders;
 
     // Geo-detection endpoint
     if (url.pathname === "/api/geo" && request.method === "GET") {
