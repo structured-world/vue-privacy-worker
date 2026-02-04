@@ -9,11 +9,24 @@ compatibility_date = "2024-12-01"
 routes = [
   { pattern = "gitlab-mcp.sw.foundation/api/consent*", zone_name = "sw.foundation" },
   { pattern = "gitlab-mcp.sw.foundation/api/geo", zone_name = "sw.foundation" },
+  { pattern = "gitlab-mcp.sw.foundation/api/analytics*", zone_name = "sw.foundation" },
   { pattern = "privacy.sw.foundation/api/consent*", zone_name = "sw.foundation" },
   { pattern = "privacy.sw.foundation/api/geo", zone_name = "sw.foundation" },
+  { pattern = "privacy.sw.foundation/api/analytics*", zone_name = "sw.foundation" },
 ]
 
 # KV namespace for consent storage (365 days TTL)
 [[kv_namespaces]]
 binding = "CONSENT_KV"
 id = "760ad4a19de244b5b24f258bec6e2e4b"
+
+# KV namespace for analytics aggregates (90 days TTL)
+# Create with: wrangler kv:namespace create ANALYTICS_KV
+[[kv_namespaces]]
+binding = "ANALYTICS_KV"
+id = "REPLACE_WITH_YOUR_ANALYTICS_KV_ID"
+
+# Secret for admin analytics access
+# Set with: wrangler secret put ANALYTICS_ADMIN_TOKEN
+# [vars]
+# ANALYTICS_ADMIN_TOKEN is set via wrangler secret, not here
