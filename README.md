@@ -137,6 +137,10 @@ This is a fixed-window rate limiter: the window resets based on an internal
 `resetAt` timestamp. The KV entry TTL is set to `windowSeconds` on each allowed
 request as a cleanup mechanism — entries auto-expire after the last allowed request.
 
+**Fail-open behavior:** If KV operations fail (e.g., temporary unavailability),
+requests proceed without rate limiting. This prioritizes availability over strict
+enforcement. Rate limiting resumes automatically when KV recovers.
+
 ## Consent Versioning
 
 The worker supports consent versioning to handle privacy policy changes. When your privacy policy or cookie categories change, you can bump the consent version to invalidate existing consents and force users to re-consent.
