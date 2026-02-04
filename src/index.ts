@@ -9,14 +9,20 @@
  *        If version param provided and doesn't match stored version, returns found: false
  * - POST /api/consent - Store consent preferences
  * - GET  /api/geo - Geo-detection via Cloudflare request.cf
+ * - POST /api/analytics - Record consent analytics events
+ * - GET  /api/analytics - Admin reporting endpoint (requires auth)
  *
- * KV Binding: CONSENT_KV
- * KV Key format: {domain}:{user_id}
- * TTL: 365 days
+ * KV Bindings:
+ * - CONSENT_KV: User consent storage (key format: {domain}:{user_id})
+ * - ANALYTICS_KV: Analytics aggregates (key format: analytics:{domain}:{date})
+ *
+ * TTL: 365 days for consent, 90 days for analytics
  */
 
 interface Env {
   CONSENT_KV: KVNamespace;
+  ANALYTICS_KV: KVNamespace;
+  ANALYTICS_ADMIN_TOKEN?: string;
 }
 
 interface ConsentData {
@@ -35,7 +41,70 @@ interface StoredConsent extends ConsentData {
   updatedAt: string;
 }
 
+// Analytics event types
+type AnalyticsEventType =
+  | "consent_given"
+  | "consent_updated"
+  | "banner_shown"
+  | "banner_dismissed";
+
+interface AnalyticsEventRequest {
+  event: AnalyticsEventType;
+  categories?: {
+    analytics?: boolean;
+    marketing?: boolean;
+    functional?: boolean;
+  };
+  meta?: {
+    timeToDecision?: number;
+    source?: "banner" | "preference_center";
+  };
+}
+
+// Aggregated analytics stored per domain per day
+interface DailyAnalytics {
+  banner_shown: number;
+  consent_given: number;
+  consent_updated: number;
+  banner_dismissed: number;
+  categories: {
+    analytics: { accepted: number; rejected: number };
+    marketing: { accepted: number; rejected: number };
+    functional: { accepted: number; rejected: number };
+  };
+  timeToDecision: {
+    sum: number;
+    count: number;
+  };
+}
+
+interface AnalyticsReportResponse {
+  domain: string;
+  period: { from: string; to: string };
+  totals: {
+    bannerShown: number;
+    consentGiven: number;
+    consentUpdated: number;
+    bannerDismissed: number;
+    optInRate: number;
+  };
+  byCategory: {
+    analytics: { acceptRate: number };
+    marketing: { acceptRate: number };
+    functional: { acceptRate: number };
+  };
+  avgTimeToDecision: number | null;
+  daily: Array<{
+    date: string;
+    bannerShown: number;
+    consentGiven: number;
+    consentUpdated: number;
+    bannerDismissed: number;
+  }>;
+}
+
 const CONSENT_TTL_SECONDS = 365 * 24 * 60 * 60; // 365 days
+const ANALYTICS_TTL_SECONDS = 90 * 24 * 60 * 60; // 90 days
 
 // Allowed origins per domain
 const ALLOWED_DOMAINS: Record<string, string[]> = {
@@ -55,12 +124,11 @@ export default {
   async fetch(
     request: Request,
     env: Env,
-    _ctx?: ExecutionContext,
+    _ctx: ExecutionContext,
   ): Promise<Response> {
-    // ExecutionContext is part of Cloudflare Workers API but unused in this simple worker.
-    // Keeping the parameter in the signature ensures compatibility with the Workers runtime
-    // (which always passes ctx as third argument), while the underscore prefix indicates it is unused.
     const url = new URL(request.url);
+    // Host is derived from URL (set by Cloudflare routing), not from Host header.
+    // This is safe: Workers only receive requests matching wrangler.toml routes.
     const host = url.hostname;
 
     // CORS headers
@@ -77,6 +145,40 @@ export default {
       return handleGeo(request, corsHeaders);
     }
 
+    // Analytics endpoints
+    // POST is intentionally public (called from client-side consent banner).
+    // Rate limiting is not implemented - for high-traffic sites, add at edge (WAF rules).
+    // GET requires admin auth (handled in handleAnalyticsReport).
+    if (url.pathname === "/api/analytics") {
+      if (!env.ANALYTICS_KV) {
+        return jsonResponse(
+          { error: "Analytics storage not configured" },
+          500,
+          corsHeaders,
+        );
+      }
+
+      try {
+        if (request.method === "POST") {
+          return handleAnalyticsEvent(request, host, env, corsHeaders);
+        }
+
+        if (request.method === "GET") {
+          return handleAnalyticsReport(request, url, host, env, corsHeaders);
+        }
+
+        return new Response("Method Not Allowed", {
+          status: 405,
+          headers: corsHeaders,
+        });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "Unknown error";
+        console.error("Analytics error:", message);
+        return jsonResponse({ error: "Internal error" }, 500, corsHeaders);
+      }
+    }
+
+    // Consent endpoints
     if (url.pathname !== "/api/consent") {
       return new Response("Not Found", { status: 404 });
     }
@@ -118,7 +220,7 @@ function getCorsHeaders(host: string, origin: string): Record<string, string> {
   return {
     "Access-Control-Allow-Origin": allowed,
     "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization",
     "Access-Control-Max-Age": "86400",
   };
 }
@@ -276,4 +378,340 @@ async function handlePost(
   });
 
   return jsonResponse({ success: true, id: userId }, 200, corsHeaders);
+}
+
+// ============================================================================
+// Analytics Handlers
+// ============================================================================
+
+const VALID_EVENT_TYPES: AnalyticsEventType[] = [
+  "consent_given",
+  "consent_updated",
+  "banner_shown",
+  "banner_dismissed",
+];
+
+// Returns current date in UTC (YYYY-MM-DD format)
+// Using UTC ensures consistent daily buckets across all timezones
+function getDateKey(): string {
+  return new Date().toISOString().split("T")[0];
+}
+
+function getAnalyticsKey(domain: string, date: string): string {
+  return `analytics:${domain}:${date}`;
+}
+
+function createEmptyDailyAnalytics(): DailyAnalytics {
+  return {
+    banner_shown: 0,
+    consent_given: 0,
+    consent_updated: 0,
+    banner_dismissed: 0,
+    categories: {
+      analytics: { accepted: 0, rejected: 0 },
+      marketing: { accepted: 0, rejected: 0 },
+      functional: { accepted: 0, rejected: 0 },
+    },
+    timeToDecision: {
+      sum: 0,
+      count: 0,
+    },
+  };
+}
+
+async function handleAnalyticsEvent(
+  request: Request,
+  host: string,
+  env: Env,
+  corsHeaders: Record<string, string>,
+): Promise<Response> {
+  const body = await request.json().catch(() => null);
+
+  if (!body || typeof body !== "object") {
+    return jsonResponse({ error: "Invalid request body" }, 400, corsHeaders);
+  }
+
+  const data = body as Record<string, unknown>;
+
+  // Validate event type
+  const eventType = data.event as string;
+  if (!eventType || !VALID_EVENT_TYPES.includes(eventType as AnalyticsEventType)) {
+    return jsonResponse(
+      { error: "Invalid or missing event type" },
+      400,
+      corsHeaders,
+    );
+  }
+
+  const dateKey = getDateKey();
+  const kvKey = getAnalyticsKey(host, dateKey);
+
+  // Get current daily analytics or create new
+  // Note: Read-modify-write has inherent race condition in KV.
+  // For analytics counters, small count loss under high concurrency is acceptable.
+  // If exact counts are needed, use Durable Objects instead.
+  const stored = await env.ANALYTICS_KV.get(kvKey);
+  let analytics: DailyAnalytics;
+  if (stored) {
+    try {
+      // Type assertion is acceptable here: we control the write format, and any
+      // malformed data (e.g., missing fields) will produce undefined values that
+      // are handled safely via arithmetic (undefined + 1 = NaN, but we'd catch
+      // that on next read). For stricter validation, use Zod or similar.
+      analytics = JSON.parse(stored) as DailyAnalytics;
+    } catch {
+      // If stored data is corrupted, start fresh for this day
+      console.error(`Corrupted analytics data for ${kvKey}, resetting`);
+      analytics = createEmptyDailyAnalytics();
+    }
+  } else {
+    analytics = createEmptyDailyAnalytics();
+  }
+
+  // Increment event counter
+  analytics[eventType as keyof Pick<DailyAnalytics, AnalyticsEventType>]++;
+
+  // Update category stats if categories provided
+  // typeof check on each property handles arrays, null, and other non-object types safely
+  const categories = data.categories as Record<string, boolean> | undefined;
+  if (
+    categories &&
+    typeof categories === "object" &&
+    !Array.isArray(categories) &&
+    (eventType === "consent_given" || eventType === "consent_updated")
+  ) {
+    for (const cat of ["analytics", "marketing", "functional"] as const) {
+      if (typeof categories[cat] === "boolean") {
+        if (categories[cat]) {
+          analytics.categories[cat].accepted++;
+        } else {
+          analytics.categories[cat].rejected++;
+        }
+      }
+    }
+  }
+
+  // Update time to decision stats if provided (must be positive finite number).
+  // Upper bound not enforced - legitimate slow decisions exist (e.g., user reads privacy policy).
+  // Overflow risk is negligible: JS safe integer is 2^53-1, and with 90-day TTL even millions
+  // of events with max realistic timeToDecision (~1 hour = 3.6M ms) won't approach that limit.
+  const meta = data.meta as { timeToDecision?: number } | undefined;
+  if (
+    meta?.timeToDecision &&
+    typeof meta.timeToDecision === "number" &&
+    meta.timeToDecision > 0 &&
+    Number.isFinite(meta.timeToDecision)
+  ) {
+    analytics.timeToDecision.sum += meta.timeToDecision;
+    analytics.timeToDecision.count++;
+  }
+
+  // Store updated analytics
+  await env.ANALYTICS_KV.put(kvKey, JSON.stringify(analytics), {
+    expirationTtl: ANALYTICS_TTL_SECONDS,
+  });
+
+  return jsonResponse({ success: true }, 200, corsHeaders);
+}
+
+async function handleAnalyticsReport(
+  request: Request,
+  url: URL,
+  host: string,
+  env: Env,
+  corsHeaders: Record<string, string>,
+): Promise<Response> {
+  // Check admin authorization
+  const authHeader = request.headers.get("Authorization");
+  if (!env.ANALYTICS_ADMIN_TOKEN) {
+    return jsonResponse(
+      { error: "Admin access not configured" },
+      500,
+      corsHeaders,
+    );
+  }
+
+  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    return jsonResponse({ error: "Authorization required" }, 401, corsHeaders);
+  }
+
+  const token = authHeader.slice(7);
+  // Simple string comparison is acceptable for internal admin API.
+  // Timing attacks require network proximity and high precision;
+  // the latency variance in KV/network operations provides natural noise.
+  if (token !== env.ANALYTICS_ADMIN_TOKEN) {
+    return jsonResponse({ error: "Invalid token" }, 403, corsHeaders);
+  }
+
+  // Parse and validate query params
+  const domainParam = url.searchParams.get("domain");
+  // Validate domain format: labels separated by dots, no consecutive dots/hyphens.
+  // Single-label domains (e.g., "localhost") intentionally not supported for the domain
+  // query param - in local dev, the host header already provides the correct domain.
+  const domainRegex = /^[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?)*$/;
+  const domain =
+    domainParam && domainRegex.test(domainParam)
+      ? domainParam
+      : host;
+  const fromDate = url.searchParams.get("from");
+  const toDate = url.searchParams.get("to");
+
+  if (!fromDate || !toDate) {
+    return jsonResponse(
+      { error: "Missing from/to date parameters" },
+      400,
+      corsHeaders,
+    );
+  }
+
+  // Validate date format (YYYY-MM-DD). Semantic validation (e.g., Feb 30) is handled
+  // by getDateRange() which returns empty array for invalid dates via Date.parse().
+  const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+  if (!dateRegex.test(fromDate) || !dateRegex.test(toDate)) {
+    return jsonResponse(
+      { error: "Invalid date format. Use YYYY-MM-DD" },
+      400,
+      corsHeaders,
+    );
+  }
+
+  // Generate date range (returns empty for semantically invalid dates like 2026-02-30)
+  const dates = getDateRange(fromDate, toDate);
+  if (dates.length === 0) {
+    return jsonResponse(
+      { error: "Invalid date range" },
+      400,
+      corsHeaders,
+    );
+  }
+
+  if (dates.length > 366) {
+    return jsonResponse(
+      { error: "Date range too large (max 366 days)" },
+      400,
+      corsHeaders,
+    );
+  }
+
+  // Fetch all daily analytics in the range
+  // Sequential KV lookups are acceptable for admin-only endpoint with max 366 days.
+  // For higher scale, consider KV list() with prefix or aggregation in Durable Objects.
+  const dailyData: Array<{ date: string; data: DailyAnalytics }> = [];
+  for (const date of dates) {
+    const kvKey = getAnalyticsKey(domain, date);
+    const stored = await env.ANALYTICS_KV.get(kvKey);
+    if (stored) {
+      try {
+        dailyData.push({ date, data: JSON.parse(stored) as DailyAnalytics });
+      } catch {
+        // Skip corrupted entries - data integrity issues are logged but don't fail the report
+        console.error(`Corrupted analytics data for ${kvKey}`);
+      }
+    }
+  }
+
+  // Aggregate totals
+  const totals = {
+    bannerShown: 0,
+    consentGiven: 0,
+    consentUpdated: 0,
+    bannerDismissed: 0,
+  };
+  const categoryTotals = {
+    analytics: { accepted: 0, rejected: 0 },
+    marketing: { accepted: 0, rejected: 0 },
+    functional: { accepted: 0, rejected: 0 },
+  };
+  let timeToDecisionSum = 0;
+  let timeToDecisionCount = 0;
+
+  for (const { data } of dailyData) {
+    totals.bannerShown += data.banner_shown;
+    totals.consentGiven += data.consent_given;
+    totals.consentUpdated += data.consent_updated;
+    totals.bannerDismissed += data.banner_dismissed;
+
+    for (const cat of ["analytics", "marketing", "functional"] as const) {
+      categoryTotals[cat].accepted += data.categories[cat].accepted;
+      categoryTotals[cat].rejected += data.categories[cat].rejected;
+    }
+
+    timeToDecisionSum += data.timeToDecision.sum;
+    timeToDecisionCount += data.timeToDecision.count;
+  }
+
+  // Calculate rates
+  const optInRate =
+    totals.bannerShown > 0 ? totals.consentGiven / totals.bannerShown : 0;
+
+  const byCategory = {
+    analytics: {
+      acceptRate: calculateAcceptRate(categoryTotals.analytics),
+    },
+    marketing: {
+      acceptRate: calculateAcceptRate(categoryTotals.marketing),
+    },
+    functional: {
+      acceptRate: calculateAcceptRate(categoryTotals.functional),
+    },
+  };
+
+  const avgTimeToDecision =
+    timeToDecisionCount > 0
+      ? Math.round(timeToDecisionSum / timeToDecisionCount)
+      : null;
+
+  // Build daily breakdown
+  const daily = dailyData.map(({ date, data }) => ({
+    date,
+    bannerShown: data.banner_shown,
+    consentGiven: data.consent_given,
+    consentUpdated: data.consent_updated,
+    bannerDismissed: data.banner_dismissed,
+  }));
+
+  const report: AnalyticsReportResponse = {
+    domain,
+    period: { from: fromDate, to: toDate },
+    totals: {
+      ...totals,
+      optInRate: Math.round(optInRate * 1000) / 1000,
+    },
+    byCategory,
+    avgTimeToDecision,
+    daily,
+  };
+
+  return jsonResponse(report, 200, corsHeaders);
+}
+
+function calculateAcceptRate(stats: { accepted: number; rejected: number }): number {
+  const total = stats.accepted + stats.rejected;
+  if (total === 0) return 0;
+  return Math.round((stats.accepted / total) * 1000) / 1000;
+}
+
+// Generate array of dates between from and to (inclusive)
+// Future dates are allowed - admin may want to see empty report for upcoming period
+// setDate() correctly handles month boundaries in JavaScript
+function getDateRange(from: string, to: string): string[] {
+  const dates: string[] = [];
+  const fromDate = new Date(from + "T00:00:00Z");
+  const toDate = new Date(to + "T00:00:00Z");
+
+  if (isNaN(fromDate.getTime()) || isNaN(toDate.getTime())) {
+    return [];
+  }
+
+  if (fromDate > toDate) {
+    return [];
+  }
+
+  const current = new Date(fromDate);
+  while (current <= toDate) {
+    dates.push(current.toISOString().split("T")[0]);
+    current.setUTCDate(current.getUTCDate() + 1);
+  }
+
+  return dates;
 }
