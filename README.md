@@ -191,7 +191,8 @@ The worker implements per-IP rate limiting to prevent abuse.
 ### Default Limits
 
 - **100 requests per minute** per IP address
-- Applies to all endpoints (except OPTIONS preflight)
+- Applies to `/api/consent` endpoints only (GET and POST)
+- `/api/geo` and `/api/analytics` are not rate-limited
 
 ### Customizing Limits
 
@@ -205,7 +206,7 @@ RATE_LIMIT_WINDOW_SECONDS = "120"  # 2 minute window
 
 ### Response Headers
 
-All responses include rate limit headers:
+Rate-limited endpoints (`/api/consent`) include rate limit headers:
 
 | Header | Description |
 |--------|-------------|
