@@ -5,7 +5,8 @@
  * Per-domain isolation via KV key prefix.
  *
  * Endpoints:
- * - GET  /api/consent?id=<user_id> - Retrieve stored consent
+ * - GET  /api/consent?id=<user_id>&version=<expected_version> - Retrieve stored consent
+ *        If version param provided and doesn't match stored version, returns found: false
  * - POST /api/consent - Store consent preferences
  * - GET  /api/geo - Geo-detection via Cloudflare request.cf
  *
@@ -51,7 +52,11 @@ const ALLOWED_DOMAINS: Record<string, string[]> = {
 };
 
 export default {
-  async fetch(request: Request, env: Env): Promise<Response> {
+  async fetch(
+    request: Request,
+    env: Env,
+    _ctx?: ExecutionContext,
+  ): Promise<Response> {
     const url = new URL(request.url);
     const host = url.hostname;
 
@@ -153,6 +158,7 @@ async function handleGet(
   corsHeaders: Record<string, string>,
 ): Promise<Response> {
   const userId = url.searchParams.get("id");
+  const expectedVersion = url.searchParams.get("version");
 
   if (!userId) {
     return jsonResponse({ error: "Missing id parameter" }, 400, corsHeaders);
@@ -172,6 +178,17 @@ async function handleGet(
 
   try {
     const consent = JSON.parse(stored) as StoredConsent;
+
+    // Version validation: if expectedVersion is provided and doesn't match,
+    // return found: false to force re-consent
+    if (expectedVersion && consent.version !== expectedVersion) {
+      return jsonResponse(
+        { found: false, versionMismatch: true, storedVersion: consent.version },
+        200,
+        corsHeaders,
+      );
+    }
+
     return jsonResponse({ found: true, consent }, 200, corsHeaders);
   } catch {
     return jsonResponse(
