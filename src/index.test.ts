@@ -1,3 +1,9 @@
+/**
+ * Worker integration tests for analytics and basic consent endpoints.
+ *
+ * Note: Consent versioning tests are in src/__tests__/consent.test.ts (separate focus).
+ * KV cleanup is not needed - miniflare provides isolated KV per test run.
+ */
 import {
   env,
   createExecutionContext,
