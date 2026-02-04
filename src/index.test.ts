@@ -416,6 +416,52 @@ describe("Analytics API", () => {
     expect(status).toBe(200);
     expect(data.success).toBe(true);
   });
+
+  // Test reversed date range returns empty (invalid range)
+  it("GET /api/analytics returns error for reversed date range", async () => {
+    const request = createRequest(
+      "GET",
+      "/api/analytics?from=2026-01-31&to=2026-01-01",
+      { authorization: "Bearer test-admin-token" },
+    );
+    const { status, data } = await fetchJson<{ error: string }>(request, env);
+
+    expect(status).toBe(400);
+    expect(data.error).toBe("Invalid date range");
+  });
+
+  // Test malformed categories data is handled gracefully
+  it("POST /api/analytics handles array categories gracefully", async () => {
+    const { status, data } = await fetchJson<{ success: boolean }>(
+      createRequest("POST", "/api/analytics", {
+        body: {
+          event: "consent_given",
+          categories: ["analytics", "marketing"],
+        },
+      }),
+      env,
+    );
+
+    // Event should still be recorded (categories ignored if malformed)
+    expect(status).toBe(200);
+    expect(data.success).toBe(true);
+  });
+
+  // Test null categories is handled gracefully
+  it("POST /api/analytics handles null categories gracefully", async () => {
+    const { status, data } = await fetchJson<{ success: boolean }>(
+      createRequest("POST", "/api/analytics", {
+        body: {
+          event: "consent_given",
+          categories: null,
+        },
+      }),
+      env,
+    );
+
+    expect(status).toBe(200);
+    expect(data.success).toBe(true);
+  });
 });
 
 describe("CORS", () => {
