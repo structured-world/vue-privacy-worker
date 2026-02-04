@@ -264,6 +264,45 @@ describe("Consent API", () => {
       expect(status).toBe(200);
       expect(data.found).toBe(true);
     });
+
+    /**
+     * Legacy consent records may not have a version field.
+     * When version check is requested, these should trigger version mismatch
+     * with storedVersion: null to indicate no version was stored.
+     */
+    it("should handle legacy consent without version field", async () => {
+      // Arrange: store consent WITHOUT version field (simulates legacy data)
+      const userId = "test-legacy-no-version-" + Date.now();
+      testUserIds.push(userId);
+
+      const legacyConsent = {
+        domain: TEST_HOST,
+        categories: {
+          analytics: true,
+          marketing: false,
+          functional: true,
+        },
+        timestamp: Date.now(),
+        // No version field - simulates legacy consent
+        updatedAt: new Date().toISOString(),
+      };
+
+      await env.CONSENT_KV.put(
+        `${TEST_HOST}:${userId}`,
+        JSON.stringify(legacyConsent),
+      );
+
+      // Act: request with version check
+      const { status, data } = await fetchWorker(
+        `/api/consent?id=${userId}&version=2.0`,
+      );
+
+      // Assert: version mismatch triggered, storedVersion is null (undefined -> null)
+      expect(status).toBe(200);
+      expect(data.found).toBe(false);
+      expect(data.versionMismatch).toBe(true);
+      expect(data.storedVersion).toBeNull();
+    });
   });
 
   describe("POST /api/consent", () => {

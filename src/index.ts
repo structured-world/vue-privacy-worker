@@ -188,7 +188,12 @@ async function handleGet(
     // field (consent.version would be undefined, triggering mismatch - correct behavior).
     if (expectedVersion && consent.version !== expectedVersion) {
       return jsonResponse(
-        { found: false, versionMismatch: true, storedVersion: consent.version },
+        {
+          found: false,
+          versionMismatch: true,
+          // For legacy consents without version field, storedVersion will be null
+          storedVersion: consent.version ?? null,
+        },
         200,
         corsHeaders,
       );
