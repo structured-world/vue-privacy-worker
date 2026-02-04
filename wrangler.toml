@@ -21,7 +21,10 @@ binding = "CONSENT_KV"
 id = "760ad4a19de244b5b24f258bec6e2e4b"
 
 # KV namespace for analytics aggregates (90 days TTL)
-# Create with: wrangler kv:namespace create ANALYTICS_KV
+# IMPORTANT: This is a placeholder for self-hosting.
+# Create your own namespace and replace the ID before deploying:
+#   wrangler kv:namespace create ANALYTICS_KV
+# The worker will return 500 error if this is not configured correctly.
 [[kv_namespaces]]
 binding = "ANALYTICS_KV"
 id = "REPLACE_WITH_YOUR_ANALYTICS_KV_ID"

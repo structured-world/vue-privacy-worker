@@ -10,7 +10,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit && echo 'Type check passed'"
   },
   "devDependencies": {
     "@cloudflare/vitest-pool-workers": "^0.8.0",

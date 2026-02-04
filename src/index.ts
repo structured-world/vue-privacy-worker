@@ -365,6 +365,8 @@ const VALID_EVENT_TYPES: AnalyticsEventType[] = [
   "banner_dismissed",
 ];
 
+// Returns current date in UTC (YYYY-MM-DD format)
+// Using UTC ensures consistent daily buckets across all timezones
 function getDateKey(): string {
   return new Date().toISOString().split("T")[0];
 }
@@ -419,6 +421,9 @@ async function handleAnalyticsEvent(
   const kvKey = getAnalyticsKey(host, dateKey);
 
   // Get current daily analytics or create new
+  // Note: Read-modify-write has inherent race condition in KV.
+  // For analytics counters, small count loss under high concurrency is acceptable.
+  // If exact counts are needed, use Durable Objects instead.
   const stored = await env.ANALYTICS_KV.get(kvKey);
   const analytics: DailyAnalytics = stored
     ? (JSON.parse(stored) as DailyAnalytics)
@@ -444,9 +449,13 @@ async function handleAnalyticsEvent(
     }
   }
 
-  // Update time to decision stats if provided
+  // Update time to decision stats if provided (must be positive)
   const meta = data.meta as { timeToDecision?: number } | undefined;
-  if (meta?.timeToDecision && typeof meta.timeToDecision === "number") {
+  if (
+    meta?.timeToDecision &&
+    typeof meta.timeToDecision === "number" &&
+    meta.timeToDecision > 0
+  ) {
     analytics.timeToDecision.sum += meta.timeToDecision;
     analytics.timeToDecision.count++;
   }
@@ -485,8 +494,13 @@ async function handleAnalyticsReport(
     return jsonResponse({ error: "Invalid token" }, 403, corsHeaders);
   }
 
-  // Parse query params
-  const domain = url.searchParams.get("domain") || host;
+  // Parse and validate query params
+  const domainParam = url.searchParams.get("domain");
+  // Validate domain format if provided (alphanumeric, dots, hyphens only)
+  const domain =
+    domainParam && /^[a-zA-Z0-9][a-zA-Z0-9.-]*[a-zA-Z0-9]$/.test(domainParam)
+      ? domainParam
+      : host;
   const fromDate = url.searchParams.get("from");
   const toDate = url.searchParams.get("to");
 
@@ -527,6 +541,8 @@ async function handleAnalyticsReport(
   }
 
   // Fetch all daily analytics in the range
+  // Sequential KV lookups are acceptable for admin-only endpoint with max 366 days.
+  // For higher scale, consider KV list() with prefix or aggregation in Durable Objects.
   const dailyData: Array<{ date: string; data: DailyAnalytics }> = [];
   for (const date of dates) {
     const kvKey = getAnalyticsKey(domain, date);

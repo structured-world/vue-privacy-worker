@@ -3,7 +3,7 @@ import {
   createExecutionContext,
   waitOnExecutionContext,
 } from "cloudflare:test";
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect } from "vitest";
 import worker from "./index";
 
 // Helper to create a request with optional body and headers
@@ -367,6 +367,53 @@ describe("Analytics API", () => {
 
       expect(status).toBe(200);
       expect(data.success).toBe(true);
+    }
+  });
+
+  // Test date range too large validation
+  it("GET /api/analytics returns error for date range exceeding 366 days", async () => {
+    const request = createRequest(
+      "GET",
+      "/api/analytics?from=2024-01-01&to=2026-01-01",
+      { authorization: "Bearer test-admin-token" },
+    );
+    const { status, data } = await fetchJson<{ error: string }>(request, env);
+
+    expect(status).toBe(400);
+    expect(data.error).toBe("Date range too large (max 366 days)");
+  });
+
+  // Test negative timeToDecision is ignored
+  it("POST /api/analytics ignores negative timeToDecision values", async () => {
+    const today = new Date().toISOString().split("T")[0];
+
+    // Record event with negative timeToDecision
+    await fetchJson(
+      createRequest("POST", "/api/analytics", {
+        body: {
+          event: "consent_given",
+          categories: { analytics: true, marketing: true, functional: true },
+          meta: { timeToDecision: -1000 },
+        },
+      }),
+      env,
+    );
+
+    // Fetch report and verify avgTimeToDecision is not affected
+    const request = createRequest(
+      "GET",
+      `/api/analytics?from=${today}&to=${today}`,
+      { authorization: "Bearer test-admin-token" },
+    );
+    const { status, data } = await fetchJson<{
+      avgTimeToDecision: number | null;
+    }>(request, env);
+
+    expect(status).toBe(200);
+    // avgTimeToDecision should be null or a positive number (from other tests)
+    // not a negative number
+    if (data.avgTimeToDecision !== null) {
+      expect(data.avgTimeToDecision).toBeGreaterThan(0);
     }
   });
 });
