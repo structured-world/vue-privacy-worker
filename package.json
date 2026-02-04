@@ -10,13 +10,15 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "lint": "tsc --noEmit && echo 'Type check passed'"
+    "lint": "tsc --noEmit"
   },
   "devDependencies": {
-    "@cloudflare/vitest-pool-workers": "^0.8.0",
+    "@cloudflare/vitest-pool-workers": "^0.12.9",
     "@cloudflare/workers-types": "^4.20241230.0",
+    "@vitest/runner": "^2.0.0",
+    "@vitest/snapshot": "^2.0.0",
     "typescript": "^5.7.2",
-    "vitest": "~2.1.0",
+    "vitest": "^2.0.0",
     "wrangler": "^4.61.1"
   }
 }
