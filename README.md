@@ -87,9 +87,18 @@ Response:
   "isEU": true,
   "countryCode": "DE",
   "continent": "EU",
+  "region": "Bavaria",
   "method": "worker"
 }
 ```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `isEU` | boolean | Whether visitor is in EU (for GDPR) |
+| `countryCode` | string \| null | ISO 3166-1 alpha-2 country code |
+| `continent` | string \| null | Continent code (EU, NA, AS, etc.) |
+| `region` | string \| null | Region/state name (for CCPA: California, Virginia, Colorado, Connecticut, Utah) |
+| `method` | string | Always "worker" |
 
 ## KV Key Format
 
