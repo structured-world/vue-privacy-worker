@@ -318,7 +318,7 @@ function handleGeo(
   corsHeaders: Record<string, string>,
 ): Response {
   const cf = request.cf as
-    | { country?: string; isEUCountry?: string; continent?: string }
+    | { country?: string; isEUCountry?: string; continent?: string; region?: string }
     | undefined;
 
   return jsonResponse(
@@ -326,6 +326,7 @@ function handleGeo(
       isEU: cf?.isEUCountry === "1",
       countryCode: cf?.country ?? null,
       continent: cf?.continent ?? null,
+      region: cf?.region ?? null,
       method: "worker",
     },
     200,
