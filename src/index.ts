@@ -15,8 +15,29 @@
  * TTL: 365 days
  */
 
-interface Env {
+export interface Env {
   CONSENT_KV: KVNamespace;
+  // Rate limit configuration (from wrangler.toml [vars])
+  RATE_LIMIT_MAX_REQUESTS?: string;
+  RATE_LIMIT_WINDOW_SECONDS?: string;
+}
+
+interface RateLimitConfig {
+  maxRequests: number;
+  windowSeconds: number;
+  keyPrefix: string;
+}
+
+interface RateLimitState {
+  count: number;
+  resetAt: number;
+}
+
+interface RateLimitResult {
+  allowed: boolean;
+  remaining: number;
+  resetAt: number;
+  limit: number;
 }
 
 interface ConsentData {
@@ -36,6 +57,142 @@ interface StoredConsent extends ConsentData {
 }
 
 const CONSENT_TTL_SECONDS = 365 * 24 * 60 * 60; // 365 days
+
+// Default rate limit values (can be overridden via wrangler.toml [vars])
+const DEFAULT_RATE_LIMIT: RateLimitConfig = {
+  maxRequests: 100,
+  windowSeconds: 60,
+  keyPrefix: "rl:",
+};
+
+/**
+ * Get rate limit configuration from environment or defaults
+ */
+function getRateLimitConfig(env: Env): RateLimitConfig {
+  const maxRequests = env.RATE_LIMIT_MAX_REQUESTS
+    ? parseInt(env.RATE_LIMIT_MAX_REQUESTS, 10)
+    : DEFAULT_RATE_LIMIT.maxRequests;
+  const windowSeconds = env.RATE_LIMIT_WINDOW_SECONDS
+    ? parseInt(env.RATE_LIMIT_WINDOW_SECONDS, 10)
+    : DEFAULT_RATE_LIMIT.windowSeconds;
+
+  // Fall back to defaults if env vars contain invalid numbers (NaN or <= 0)
+  const validMaxRequests = Number.isNaN(maxRequests) || maxRequests <= 0
+    ? DEFAULT_RATE_LIMIT.maxRequests
+    : maxRequests;
+  const validWindowSeconds = Number.isNaN(windowSeconds) || windowSeconds <= 0
+    ? DEFAULT_RATE_LIMIT.windowSeconds
+    : windowSeconds;
+
+  return {
+    maxRequests: validMaxRequests,
+    windowSeconds: validWindowSeconds,
+    keyPrefix: DEFAULT_RATE_LIMIT.keyPrefix,
+  };
+}
+
+/**
+ * Check and update rate limit for an IP address
+ * Uses KV with TTL for automatic expiration
+ */
+async function checkRateLimit(
+  request: Request,
+  env: Env,
+  config: RateLimitConfig,
+): Promise<RateLimitResult> {
+  // CF-Connecting-IP is set by Cloudflare for all requests passing through their network.
+  // "unknown" fallback handles direct worker invocations (tests, wrangler dev without proxy).
+  // These share a rate limit bucket, which is acceptable for non-production scenarios.
+  const ip = request.headers.get("CF-Connecting-IP") || "unknown";
+
+  // Rate limit keys use "rl:" prefix to avoid collision with consent data in shared KV namespace.
+  // Separate namespace would add deployment complexity for minimal benefit.
+  const key = `${config.keyPrefix}${ip}`;
+  const now = Math.floor(Date.now() / 1000);
+
+  // Note: KV doesn't support atomic increment, so there's a small race window between
+  // read and write. For rate limiting, occasional over-counting is acceptable.
+  const stored = await env.CONSENT_KV.get(key, "json") as RateLimitState | null;
+
+  let state: RateLimitState;
+
+  // Validate stored data structure (guard against corrupted KV entries)
+  // Check: exists, count is non-negative number, resetAt is valid number
+  const isValidState = stored &&
+    typeof stored.count === "number" && !Number.isNaN(stored.count) && stored.count >= 0 &&
+    typeof stored.resetAt === "number" && !Number.isNaN(stored.resetAt);
+
+  if (isValidState && stored.resetAt > now) {
+    // Existing window still active
+    state = {
+      count: stored.count + 1,
+      resetAt: stored.resetAt,
+    };
+  } else {
+    // New window (first request or window expired)
+    state = {
+      count: 1,
+      resetAt: now + config.windowSeconds,
+    };
+  }
+
+  const allowed = state.count <= config.maxRequests;
+  const remaining = Math.max(0, config.maxRequests - state.count);
+
+  // Only update KV if request is allowed (blocked requests don't persist to KV).
+  // This prevents attackers from resetting their window by flooding with requests.
+  // Note: state.count is calculated in memory but only persisted when allowed=true.
+  // TTL is set to windowSeconds on each write — entry expires windowSeconds after last allowed request.
+  if (allowed) {
+    await env.CONSENT_KV.put(key, JSON.stringify(state), {
+      expirationTtl: config.windowSeconds,
+    });
+  }
+
+  return {
+    allowed,
+    remaining,
+    resetAt: state.resetAt,
+    limit: config.maxRequests,
+  };
+}
+
+/**
+ * Add rate limit headers to a Headers object
+ */
+function addRateLimitHeaders(
+  headers: Record<string, string>,
+  result: RateLimitResult,
+): Record<string, string> {
+  return {
+    ...headers,
+    "X-RateLimit-Limit": result.limit.toString(),
+    "X-RateLimit-Remaining": result.remaining.toString(),
+    "X-RateLimit-Reset": result.resetAt.toString(),
+  };
+}
+
+/**
+ * Create a 429 Too Many Requests response
+ */
+function rateLimitResponse(
+  corsHeaders: Record<string, string>,
+  result: RateLimitResult,
+): Response {
+  const headers = addRateLimitHeaders(corsHeaders, result);
+  headers["Retry-After"] = Math.max(1, result.resetAt - Math.floor(Date.now() / 1000)).toString();
+
+  return new Response(
+    JSON.stringify({
+      error: "rate_limit_exceeded",
+      retryAfter: parseInt(headers["Retry-After"], 10),
+    }),
+    {
+      status: 429,
+      headers: { ...headers, "Content-Type": "application/json" },
+    },
+  );
+}
 
 // Allowed origins per domain
 const ALLOWED_DOMAINS: Record<string, string[]> = {
@@ -67,21 +224,22 @@ export default {
     const origin = request.headers.get("Origin") || "";
     const corsHeaders = getCorsHeaders(host, origin);
 
-    // Handle CORS preflight
+    // Handle CORS preflight (no rate limiting for OPTIONS)
     if (request.method === "OPTIONS") {
       return new Response(null, { status: 204, headers: corsHeaders });
     }
 
-    // Geo-detection endpoint (no KV needed)
+    // Geo-detection endpoint (no KV needed, no rate limiting)
     if (url.pathname === "/api/geo" && request.method === "GET") {
       return handleGeo(request, corsHeaders);
     }
 
+    // Consent endpoints only from here
     if (url.pathname !== "/api/consent") {
-      return new Response("Not Found", { status: 404 });
+      return new Response("Not Found", { status: 404, headers: corsHeaders });
     }
 
-    // Check KV binding
+    // Check KV binding (required for rate limiting and consent storage)
     if (!env.CONSENT_KV) {
       return jsonResponse(
         { error: "Storage not configured" },
@@ -90,23 +248,43 @@ export default {
       );
     }
 
+    // Check rate limit for all non-OPTIONS requests
+    // On KV errors, allow request to proceed (fail-open for availability)
+    let rateLimitResult: RateLimitResult | null = null;
+    try {
+      const rateLimitConfig = getRateLimitConfig(env);
+      rateLimitResult = await checkRateLimit(request, env, rateLimitConfig);
+    } catch (err) {
+      // Log error but don't block request — prefer availability over strict rate limiting
+      console.error("Rate limit check failed:", err instanceof Error ? err.message : err);
+    }
+
+    if (rateLimitResult && !rateLimitResult.allowed) {
+      return rateLimitResponse(corsHeaders, rateLimitResult);
+    }
+
+    // Add rate limit headers to all responses (if rate limit check succeeded)
+    const headersWithRateLimit = rateLimitResult
+      ? addRateLimitHeaders(corsHeaders, rateLimitResult)
+      : corsHeaders;
+
     try {
       if (request.method === "GET") {
-        return handleGet(url, host, env, corsHeaders);
+        return handleGet(url, host, env, headersWithRateLimit);
       }
 
       if (request.method === "POST") {
-        return handlePost(request, host, env, corsHeaders);
+        return handlePost(request, host, env, headersWithRateLimit);
       }
 
       return new Response("Method Not Allowed", {
         status: 405,
-        headers: corsHeaders,
+        headers: headersWithRateLimit,
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : "Unknown error";
       console.error("Consent storage error:", message);
-      return jsonResponse({ error: "Internal error" }, 500, corsHeaders);
+      return jsonResponse({ error: "Internal error" }, 500, headersWithRateLimit);
     }
   },
 };
@@ -119,6 +297,7 @@ function getCorsHeaders(host: string, origin: string): Record<string, string> {
     "Access-Control-Allow-Origin": allowed,
     "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
     "Access-Control-Allow-Headers": "Content-Type",
+    "Access-Control-Expose-Headers": "X-RateLimit-Limit, X-RateLimit-Remaining, X-RateLimit-Reset, Retry-After",
     "Access-Control-Max-Age": "86400",
   };
 }

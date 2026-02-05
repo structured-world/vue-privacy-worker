@@ -8,6 +8,8 @@ Cloudflare Worker companion for [@structured-world/vue-privacy](https://github.c
 - 365-day TTL for consent storage
 - Simple REST API (GET/POST)
 - CORS support with per-domain configuration
+- Rate limiting per IP address (configurable)
+- Consent versioning for privacy policy updates
 
 ## API
 
@@ -73,6 +75,22 @@ Response:
 }
 ```
 
+### Geo Detection
+
+```
+GET /api/geo
+```
+
+Response:
+```json
+{
+  "isEU": true,
+  "countryCode": "DE",
+  "continent": "EU",
+  "method": "worker"
+}
+```
+
 ## KV Key Format
 
 ```
@@ -80,6 +98,65 @@ Response:
 ```
 
 Example: `example.com:abc123-def456`
+
+## Rate Limiting
+
+The worker implements per-IP rate limiting to prevent abuse.
+
+### Default Limits
+
+- **100 requests per minute** per IP address
+- Applies to `/api/consent` endpoints only (GET and POST)
+- `/api/geo` is not rate-limited
+
+### Customizing Limits
+
+Override defaults via `wrangler.toml` variables:
+
+```toml
+[vars]
+RATE_LIMIT_MAX_REQUESTS = "200"    # requests per window
+RATE_LIMIT_WINDOW_SECONDS = "120"  # 2 minute window
+```
+
+### Response Headers
+
+Rate-limited endpoints (`/api/consent`) include rate limit headers:
+
+| Header | Description |
+|--------|-------------|
+| `X-RateLimit-Limit` | Maximum requests allowed per window |
+| `X-RateLimit-Remaining` | Requests remaining in current window |
+| `X-RateLimit-Reset` | Unix timestamp when window resets |
+
+### Rate Limit Exceeded (429)
+
+When limit is exceeded:
+
+```json
+{
+  "error": "rate_limit_exceeded",
+  "retryAfter": 45
+}
+```
+
+Response headers include `Retry-After` with seconds until window resets.
+
+### KV Key Format for Rate Limits
+
+Rate limit state is stored in KV with prefix `rl:`:
+
+```
+rl:{ip_address}
+```
+
+This is a fixed-window rate limiter: the window resets based on an internal
+`resetAt` timestamp. The KV entry TTL is set to `windowSeconds` on each allowed
+request as a cleanup mechanism — entries auto-expire after the last allowed request.
+
+**Fail-open behavior:** If KV operations fail (e.g., temporary unavailability),
+requests proceed without rate limiting. This prioritizes availability over strict
+enforcement. Rate limiting resumes automatically when KV recovers.
 
 ## Consent Versioning
 
@@ -149,25 +226,27 @@ await fetch("/api/consent", {
 4. Add route for your domain:
    ```toml
    routes = [
-     { pattern = "yourdomain.com/api/consent", zone_name = "yourdomain.com" }
+     { pattern = "yourdomain.com/api/consent*", zone_name = "yourdomain.com" },
+     { pattern = "yourdomain.com/api/geo", zone_name = "yourdomain.com" },
    ]
    ```
 5. Deploy:
    ```bash
-   npm run deploy
+   yarn deploy
    ```
 
 ## Development
 
 ```bash
-npm install
-npm run dev      # Local development
-npm run deploy   # Manual deploy
+yarn install
+yarn dev         # Local development
+yarn test        # Run tests
+yarn deploy      # Manual deploy
 ```
 
 ## Status & Roadmap
 
-### Current (v1.0)
+### Current (v1.2)
 
 | Feature | Status |
 |---------|--------|
@@ -176,14 +255,14 @@ npm run deploy   # Manual deploy
 | 365-day TTL storage | Done |
 | CORS configuration | Done |
 | GitHub Actions deploy | Done |
+| Rate limiting | Done |
+| Consent versioning | Done |
 
 ### Planned
 
 | Feature | Description |
 |---------|-------------|
 | vue-privacy integration | Automatic sync with `@structured-world/vue-privacy` storage backend |
-| Rate limiting | Prevent abuse via KV-based rate limiting |
-| ~~Consent versioning~~ | ✅ Track consent version changes |
 | Bulk export | Admin API for compliance exports |
 | Analytics events | Optional consent analytics (opt-in rates) |
 
