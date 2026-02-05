@@ -10,15 +10,10 @@ Cloudflare Worker companion for [@structured-world/vue-privacy](https://github.c
 - CORS support with per-domain configuration
 - Rate limiting per IP address (configurable)
 - Consent versioning for privacy policy updates
-- **Consent analytics** — Track opt-in rates, banner impressions, time to decision
-- **Privacy-first analytics** — Only aggregated daily counts, no PII stored
-- **Admin reporting API** — Query analytics with date ranges
 
 ## API
 
-### Consent Endpoints
-
-#### Get Consent
+### Get Consent
 
 ```
 GET /api/consent?id=<user_id>&version=<expected_version>
@@ -55,7 +50,7 @@ Response (version mismatch - triggers re-consent):
 }
 ```
 
-#### Store Consent
+### Store Consent
 
 ```
 POST /api/consent
@@ -80,101 +75,21 @@ Response:
 }
 ```
 
-### Analytics Endpoints
-
-Track consent interaction metrics to understand user behavior. Privacy-first design: only aggregated counts are stored, no individual events or PII.
-
-#### Record Analytics Event
+### Geo Detection
 
 ```
-POST /api/analytics
-Content-Type: application/json
-
-{
-  "event": "consent_given",
-  "categories": {
-    "analytics": true,
-    "marketing": false,
-    "functional": true
-  },
-  "meta": {
-    "timeToDecision": 3500,
-    "source": "banner"
-  }
-}
+GET /api/geo
 ```
-
-**Event types:**
-- `banner_shown` — Consent banner was displayed
-- `consent_given` — User gave initial consent
-- `consent_updated` — User modified their preferences
-- `banner_dismissed` — User dismissed banner without action
-
-**Optional fields:**
-- `categories` — Only for `consent_given` and `consent_updated` events
-- `meta.timeToDecision` — Milliseconds from banner shown to decision
-- `meta.source` — Where consent was given: `banner` or `preference_center`
 
 Response:
 ```json
 {
-  "success": true
+  "isEU": true,
+  "countryCode": "DE",
+  "continent": "EU",
+  "method": "worker"
 }
 ```
-
-#### Get Analytics Report (Admin)
-
-```
-GET /api/analytics?domain=<domain>&from=2026-01-01&to=2026-01-31
-Authorization: Bearer <admin_token>
-```
-
-**Query parameters:**
-- `domain` — Optional. Defaults to request host
-- `from` — Start date (YYYY-MM-DD format)
-- `to` — End date (YYYY-MM-DD format)
-
-Response:
-```json
-{
-  "domain": "example.com",
-  "period": { "from": "2026-01-01", "to": "2026-01-31" },
-  "totals": {
-    "bannerShown": 45230,
-    "consentGiven": 28456,
-    "consentUpdated": 1234,
-    "bannerDismissed": 15540,
-    "optInRate": 0.629
-  },
-  "byCategory": {
-    "analytics": { "acceptRate": 0.92 },
-    "marketing": { "acceptRate": 0.34 },
-    "functional": { "acceptRate": 0.98 }
-  },
-  "avgTimeToDecision": 4200,
-  "daily": [
-    {
-      "date": "2026-01-01",
-      "bannerShown": 1523,
-      "consentGiven": 892,
-      "consentUpdated": 45,
-      "bannerDismissed": 586
-    }
-  ]
-}
-```
-
-### Privacy Guarantees
-
-Analytics are designed with privacy in mind:
-- **No PII stored** — No user IDs, IP addresses, or fingerprints
-- **Aggregates only** — Daily counts, not individual events
-- **90-day retention** — Analytics auto-expire after 90 days
-- **Domain isolation** — Each domain's analytics are separate
-
-### Known Limitations
-
-- **Eventual consistency** — Analytics use KV read-modify-write which has inherent race conditions under high concurrency. Multiple simultaneous events may cause minor count loss. For most consent banner use cases (low-to-moderate traffic), accuracy is sufficient. If exact counts are critical, consider using Durable Objects instead.
 
 ## KV Key Format
 
@@ -192,7 +107,7 @@ The worker implements per-IP rate limiting to prevent abuse.
 
 - **100 requests per minute** per IP address
 - Applies to `/api/consent` endpoints only (GET and POST)
-- `/api/geo` and `/api/analytics` are not rate-limited
+- `/api/geo` is not rate-limited
 
 ### Customizing Limits
 
@@ -303,25 +218,19 @@ await fetch("/api/consent", {
 ## Self-Hosting
 
 1. Fork this repository
-2. Create KV namespaces:
+2. Create KV namespace:
    ```bash
    wrangler kv:namespace create CONSENT_KV
-   wrangler kv:namespace create ANALYTICS_KV
    ```
-3. Update `wrangler.toml` with your KV namespace IDs
-4. Set admin token for analytics access:
-   ```bash
-   wrangler secret put ANALYTICS_ADMIN_TOKEN
-   ```
-5. Add routes for your domain:
+3. Update `wrangler.toml` with your KV namespace ID
+4. Add route for your domain:
    ```toml
    routes = [
      { pattern = "yourdomain.com/api/consent*", zone_name = "yourdomain.com" },
      { pattern = "yourdomain.com/api/geo", zone_name = "yourdomain.com" },
-     { pattern = "yourdomain.com/api/analytics*", zone_name = "yourdomain.com" },
    ]
    ```
-6. Deploy:
+5. Deploy:
    ```bash
    yarn deploy
    ```
@@ -337,7 +246,7 @@ yarn deploy      # Manual deploy
 
 ## Status & Roadmap
 
-### Current (v1.3)
+### Current (v1.2)
 
 | Feature | Status |
 |---------|--------|
@@ -348,8 +257,6 @@ yarn deploy      # Manual deploy
 | GitHub Actions deploy | Done |
 | Rate limiting | Done |
 | Consent versioning | Done |
-| Analytics events | Done |
-| Admin analytics API | Done |
 
 ### Planned
 
@@ -357,6 +264,7 @@ yarn deploy      # Manual deploy
 |---------|-------------|
 | vue-privacy integration | Automatic sync with `@structured-world/vue-privacy` storage backend |
 | Bulk export | Admin API for compliance exports |
+| Analytics events | Optional consent analytics (opt-in rates) |
 
 ## Integration with @structured-world/vue-privacy
 
