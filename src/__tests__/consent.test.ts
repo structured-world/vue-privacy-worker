@@ -1,8 +1,8 @@
 import {
-  env,
   createExecutionContext,
   waitOnExecutionContext,
 } from "cloudflare:test";
+import { env } from "cloudflare:workers";
 import { describe, it, expect, afterEach } from "vitest";
 import worker from "../index";
 

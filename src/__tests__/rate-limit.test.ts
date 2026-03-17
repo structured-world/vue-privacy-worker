@@ -1,9 +1,9 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import {
-  env,
   createExecutionContext,
   waitOnExecutionContext,
 } from "cloudflare:test";
+import { env } from "cloudflare:workers";
 import worker from "../index";
 
 // Helper to create a request with specific IP

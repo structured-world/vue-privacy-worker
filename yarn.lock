@@ -25,20 +25,20 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@cloudflare/vitest-pool-workers@npm:^0.13.0":
-  version: 0.13.0
-  resolution: "@cloudflare/vitest-pool-workers@npm:0.13.0"
+"@cloudflare/vitest-pool-workers@npm:^0.13.1":
+  version: 0.13.1
+  resolution: "@cloudflare/vitest-pool-workers@npm:0.13.1"
   dependencies:
     cjs-module-lexer: "npm:^1.2.3"
     esbuild: "npm:0.27.3"
-    miniflare: "npm:4.20260312.0"
-    wrangler: "npm:4.73.0"
+    miniflare: "npm:4.20260312.1"
+    wrangler: "npm:4.74.0"
     zod: "npm:^3.25.76"
   peerDependencies:
     "@vitest/runner": ^4.1.0
     "@vitest/snapshot": ^4.1.0
     vitest: ^4.1.0
-  checksum: 10c0/e08e0e6797e21f0608fe413584c2421f95f114bc3740d62614df4132f9690db891adbbf050f8e1c2e5ed8fc2f4186a7dd18d2dfbf9c291b31714c95cee87e6ff
+  checksum: 10c0/53ff5b51239bff9e00781c9ef24a5018744f8ffc3cca0ba08816303255476f51e071b7cc193565e57b5776f864899bee8769f8ee3c98b138407bb646e507c51e
   languageName: node
   linkType: hard
 
@@ -77,10 +77,10 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@cloudflare/workers-types@npm:^4.20260313.1":
-  version: 4.20260313.1
-  resolution: "@cloudflare/workers-types@npm:4.20260313.1"
-  checksum: 10c0/6e01938f0ae02043f7f0c876d4c3b7f73ab53be61b51d567664e8999dd549bb1b9a99b3f06de54dbc925ffe079c647d28938a3602827fbb8d6165a832e538814
+"@cloudflare/workers-types@npm:^4.20260317.1":
+  version: 4.20260317.1
+  resolution: "@cloudflare/workers-types@npm:4.20260317.1"
+  checksum: 10c0/9e28aec6d33e8756f9eca0d350aaddefc3c816f1784b9c686fdc8c82da54e51d03514e74ef81fcd911ad35ea3422f80be984cccfb56d5d5ffbb8b26e22e3c983
   languageName: node
   linkType: hard
 
@@ -1439,9 +1439,9 @@ __metadata:
   languageName: node
   linkType: hard
 
-"miniflare@npm:4.20260312.0":
-  version: 4.20260312.0
-  resolution: "miniflare@npm:4.20260312.0"
+"miniflare@npm:4.20260312.1":
+  version: 4.20260312.1
+  resolution: "miniflare@npm:4.20260312.1"
   dependencies:
     "@cspotcode/source-map-support": "npm:0.8.1"
     sharp: "npm:^0.34.5"
@@ -1451,7 +1451,7 @@ __metadata:
     youch: "npm:4.1.0-beta.10"
   bin:
     miniflare: bootstrap.js
-  checksum: 10c0/f55c7ef7f6a6c519e91ded716bae79807086ecc3cfdc415232e1f04e66e2df3cf7944cf222e70e79cf02a67ae8864475af0b3c206d7564fb2985cfe9e5aee500
+  checksum: 10c0/ada3b9aa312b2dae81c06df35ff9961fade319c0066469436a1253fd6e64826e02da5cc548363a802381f5795712b7ffbd6d30115c08bfd9778e5915919574f8
   languageName: node
   linkType: hard
 
@@ -1962,7 +1962,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"typescript@npm:^5.7.3":
+"typescript@npm:^5.9.3":
   version: 5.9.3
   resolution: "typescript@npm:5.9.3"
   bin:
@@ -1972,7 +1972,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"typescript@patch:typescript@npm%3A^5.7.3#optional!builtin<compat/typescript>":
+"typescript@patch:typescript@npm%3A^5.9.3#optional!builtin<compat/typescript>":
   version: 5.9.3
   resolution: "typescript@patch:typescript@npm%3A5.9.3#optional!builtin<compat/typescript>::version=5.9.3&hash=5786d5"
   bin:
@@ -2140,13 +2140,13 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "vue-privacy-worker@workspace:."
   dependencies:
-    "@cloudflare/vitest-pool-workers": "npm:^0.13.0"
-    "@cloudflare/workers-types": "npm:^4.20260313.1"
+    "@cloudflare/vitest-pool-workers": "npm:^0.13.1"
+    "@cloudflare/workers-types": "npm:^4.20260317.1"
     "@vitest/runner": "npm:^4.1.0"
     "@vitest/snapshot": "npm:^4.1.0"
-    typescript: "npm:^5.7.3"
+    typescript: "npm:^5.9.3"
     vitest: "npm:^4.1.0"
-    wrangler: "npm:^4.73.0"
+    wrangler: "npm:^4.74.0"
   languageName: unknown
   linkType: soft
 
@@ -2199,16 +2199,16 @@ __metadata:
   languageName: node
   linkType: hard
 
-"wrangler@npm:4.73.0, wrangler@npm:^4.73.0":
-  version: 4.73.0
-  resolution: "wrangler@npm:4.73.0"
+"wrangler@npm:4.74.0, wrangler@npm:^4.74.0":
+  version: 4.74.0
+  resolution: "wrangler@npm:4.74.0"
   dependencies:
     "@cloudflare/kv-asset-handler": "npm:0.4.2"
     "@cloudflare/unenv-preset": "npm:2.15.0"
     blake3-wasm: "npm:2.1.5"
     esbuild: "npm:0.27.3"
     fsevents: "npm:~2.3.2"
-    miniflare: "npm:4.20260312.0"
+    miniflare: "npm:4.20260312.1"
     path-to-regexp: "npm:6.3.0"
     unenv: "npm:2.0.0-rc.24"
     workerd: "npm:1.20260312.1"
@@ -2223,7 +2223,7 @@ __metadata:
   bin:
     wrangler: bin/wrangler.js
     wrangler2: bin/wrangler.js
-  checksum: 10c0/fb709e6828381e4a7625055c9356b0baeb56c47431e6b0ce236341e60dbc4e8336e2c4939e71fae20e8d1bb4d923c4cbf60ceafb224d16b94a0efe48b6268a3f
+  checksum: 10c0/16478d6b127b2dadff9b390d3340d3e3d281afa007c8c074e0abb30600baeb26c2fb7339fbe4b2ce2b251dbc2425e9ecaf637af53989ca87806d922b58150e73
   languageName: node
   linkType: hard
 
