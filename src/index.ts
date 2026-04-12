@@ -206,6 +206,14 @@ const ALLOWED_DOMAINS: Record<string, string[]> = {
     "http://localhost:5173",
     "http://localhost:4173",
   ],
+  // Consent storage for docs.coordinode.com — routed via coordinode-docs.sw.foundation
+  // because coordinode.com DNS is on PowerDNS (not Cloudflare), so we can't add
+  // zone routes for it directly. This subdomain is in the sw.foundation CF zone.
+  "coordinode-docs.sw.foundation": [
+    "https://docs.coordinode.com",
+    "http://localhost:5173",
+    "http://localhost:4173",
+  ],
 };
 
 export default {
