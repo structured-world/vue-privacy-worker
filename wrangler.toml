@@ -11,6 +11,10 @@ routes = [
   { pattern = "gitlab-mcp.sw.foundation/api/geo", zone_name = "sw.foundation" },
   { pattern = "privacy.sw.foundation/api/consent*", zone_name = "sw.foundation" },
   { pattern = "privacy.sw.foundation/api/geo", zone_name = "sw.foundation" },
+  # CoordiNode docs — coordinode.com DNS is on PowerDNS (not Cloudflare),
+  # so we proxy API through this sw.foundation subdomain instead.
+  { pattern = "coordinode-docs.sw.foundation/api/consent*", zone_name = "sw.foundation" },
+  { pattern = "coordinode-docs.sw.foundation/api/geo", zone_name = "sw.foundation" },
 ]
 
 # KV namespace for consent storage (365 days TTL)
