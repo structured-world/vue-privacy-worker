@@ -14,12 +14,12 @@
     "test:watch": "vitest"
   },
   "devDependencies": {
-    "@cloudflare/vitest-pool-workers": "^0.14.1",
-    "@cloudflare/workers-types": "^4.20260405.1",
+    "@cloudflare/vitest-pool-workers": "^0.14.7",
+    "@cloudflare/workers-types": "^4.20260418.1",
     "@vitest/runner": "^4.1.0",
     "@vitest/snapshot": "^4.1.0",
-    "typescript": "^6.0.2",
+    "typescript": "^6.0.3",
     "vitest": "^4.1.0",
-    "wrangler": "^4.80.0"
+    "wrangler": "^4.83.0"
   }
 }
