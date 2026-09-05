@@ -4,6 +4,8 @@
   "version": "1.2.0",
   "type": "module",
   "private": true,
+  "license": "Apache-2.0",
+  "author": "Dmitry Prudnikov <mail@polaz.com>",
   "packageManager": "yarn@4.12.0",
   "scripts": {
     "dev": "wrangler dev",
