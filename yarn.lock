@@ -112,10 +112,10 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@cloudflare/workers-types@npm:^4.20260517.1":
-  version: 4.20260517.1
-  resolution: "@cloudflare/workers-types@npm:4.20260517.1"
-  checksum: 10c0/46a87f1a695b33aced8c9fb4c542f56eb9b37ae8d32ceddec93da9bfb72536edd95d3440731b31b01a4ec9af6c5e6c94b9cbe8ab1b2fda9a5d0231819574a5dd
+"@cloudflare/workers-types@npm:^5.20260903.1":
+  version: 5.20260903.1
+  resolution: "@cloudflare/workers-types@npm:5.20260903.1"
+  checksum: 10c0/667787c64630f35be5067e74968ad16eda7d0160e244c6ceefd7fc6c6b9a2689af7a0bec354600b68923dddee4aad55a655f044e1d5382d5b3a85bf6530ccb07
   languageName: node
   linkType: hard
 
@@ -2229,7 +2229,7 @@ __metadata:
   resolution: "vue-privacy-worker@workspace:."
   dependencies:
     "@cloudflare/vitest-pool-workers": "npm:^0.22.0"
-    "@cloudflare/workers-types": "npm:^4.20260517.1"
+    "@cloudflare/workers-types": "npm:^5.20260903.1"
     "@vitest/runner": "npm:^4.1.8"
     "@vitest/snapshot": "npm:^4.1.8"
     typescript: "npm:^6.0.3"
